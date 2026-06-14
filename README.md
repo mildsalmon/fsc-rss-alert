@@ -50,13 +50,18 @@ chmod +x scripts/run_poll.sh
 `launchd`에 등록합니다.
 
 ```bash
+PLIST="$HOME/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist"
+REPO_DIR="$(pwd)"
+
 mkdir -p logs
-cp launchd/com.mildsalmon.fsc-rss-alert.plist ~/Library/LaunchAgents/
-plutil -replace ProgramArguments.0 -string "$(pwd)/scripts/run_poll.sh" ~/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist
-plutil -replace WorkingDirectory -string "$(pwd)" ~/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist
-plutil -replace StandardOutPath -string "$(pwd)/logs/launchd.out.log" ~/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist
-plutil -replace StandardErrorPath -string "$(pwd)/logs/launchd.err.log" ~/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist
-launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist
+cp launchd/com.mildsalmon.fsc-rss-alert.plist "$PLIST"
+plutil -remove ProgramArguments "$PLIST" 2>/dev/null || true
+plutil -insert ProgramArguments -xml "<array><string>${REPO_DIR}/scripts/run_poll.sh</string></array>" "$PLIST"
+plutil -replace WorkingDirectory -string "$REPO_DIR" "$PLIST"
+plutil -replace StandardOutPath -string "$REPO_DIR/logs/launchd.out.log" "$PLIST"
+plutil -replace StandardErrorPath -string "$REPO_DIR/logs/launchd.err.log" "$PLIST"
+launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$PLIST"
 launchctl enable "gui/$(id -u)/com.mildsalmon.fsc-rss-alert"
 launchctl kickstart -k "gui/$(id -u)/com.mildsalmon.fsc-rss-alert"
 ```
