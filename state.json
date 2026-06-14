@@ -1,0 +1,7 @@
+{
+  "seen_ids": [],
+  "consecutive_failures": 1,
+  "failure_alert_sent": false,
+  "last_failure_at": "2026-06-14T09:40:54+00:00",
+  "last_error": "Feed fetch failed: timed out"
+}
