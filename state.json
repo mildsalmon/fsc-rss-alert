@@ -1,7 +1,16 @@
 {
-  "seen_ids": [],
-  "consecutive_failures": 1,
-  "failure_alert_sent": false,
-  "last_failure_at": "2026-06-14T09:40:54+00:00",
-  "last_error": "Feed fetch failed: timed out"
+  "seen_ids": [
+    "https://www.fsc.go.kr/no010101/87084",
+    "https://www.fsc.go.kr/no010101/87083",
+    "https://www.fsc.go.kr/no010101/87077",
+    "https://www.fsc.go.kr/no010101/87076",
+    "https://www.fsc.go.kr/no010101/87073",
+    "https://www.fsc.go.kr/no010101/87062",
+    "https://www.fsc.go.kr/no010101/87061",
+    "https://www.fsc.go.kr/no010101/87056",
+    "https://www.fsc.go.kr/no010101/87037",
+    "https://www.fsc.go.kr/no010101/87036"
+  ],
+  "consecutive_failures": 0,
+  "failure_alert_sent": false
 }
