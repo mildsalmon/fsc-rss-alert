@@ -17,6 +17,7 @@ __pycache__/
 *.py[cod]
 .python-version
 state.json.tmp
+logs/
 
 # Local secrets
 .env
