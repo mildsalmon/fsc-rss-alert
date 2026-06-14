@@ -1,4 +1,4 @@
-name: Poll FSC RSS
+name: FSC RSS Scheduled Poll
 
 on:
   schedule:
@@ -63,3 +63,4 @@ jobs:
       - name: Fail if polling failed
         if: steps.poll.outcome == 'failure'
         run: exit 1
+
