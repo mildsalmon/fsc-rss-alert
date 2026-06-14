@@ -11,8 +11,8 @@
     "https://www.fsc.go.kr/no010101/87037",
     "https://www.fsc.go.kr/no010101/87036"
   ],
-  "consecutive_failures": 2,
-  "failure_alert_sent": false,
-  "last_failure_at": "2026-06-14T13:28:55+00:00",
+  "consecutive_failures": 3,
+  "failure_alert_sent": true,
+  "last_failure_at": "2026-06-14T15:44:56+00:00",
   "last_error": "Feed fetch failed after 3 attempts: Feed fetch failed: timed out"
 }
