@@ -11,6 +11,8 @@ DEFAULT_STATE_FILE = Path("state.json")
 DEFAULT_SEEN_LIMIT = 50
 DEFAULT_FAILURE_THRESHOLD = 3
 DEFAULT_TIMEOUT_SECONDS = 20
+DEFAULT_FETCH_RETRIES = 3
+DEFAULT_FETCH_RETRY_DELAY_SECONDS = 10.0
 DEFAULT_NOTIFY_THROTTLE_SECONDS = 1.0
 USER_AGENT = "fsc-rss-alert/0.1 (+https://github.com/actions)"
 
@@ -39,4 +41,3 @@ def float_from_env(name: str, default: float) -> float:
     if value < 0:
         raise PollError(f"{name} must be at least 0")
     return value
-

@@ -40,6 +40,7 @@ GitHub 저장소의 `Settings` -> `Secrets and variables` -> `Actions`에서 아
 
 - `FAILURE_ALERT_THRESHOLD`: 연속 실패 자가 알림 임계값, 기본값 `3`
 - `FETCH_TIMEOUT_SECONDS`: RSS 및 알림 HTTP 요청 timeout, 기본값 `20`
+- `FETCH_RETRIES`: RSS fetch 재시도 횟수, 기본값 `3`
+- `FETCH_RETRY_DELAY_SECONDS`: RSS fetch 재시도 사이 대기 시간, 기본값 `10`
 - `SEEN_ID_LIMIT`: 저장할 최근 ID 개수, 기본값 `50`
 - `NOTIFY_THROTTLE_SECONDS`: 여러 알림 사이 대기 시간, 기본값 `1`
-

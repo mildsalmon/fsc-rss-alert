@@ -3,6 +3,7 @@ from __future__ import annotations
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from time import sleep
 from typing import Any
 
 import feedparser
@@ -19,7 +20,7 @@ class FeedEntry:
     published: str
 
 
-def fetch_feed(url: str, timeout_seconds: int) -> bytes:
+def fetch_feed_once(url: str, timeout_seconds: int) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
@@ -35,7 +36,29 @@ def fetch_feed(url: str, timeout_seconds: int) -> bytes:
         raise PollError("Feed fetch timed out") from exc
 
 
+def fetch_feed(
+    url: str,
+    timeout_seconds: int,
+    retries: int,
+    retry_delay_seconds: float,
+) -> bytes:
+    last_error: PollError | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            return fetch_feed_once(url, timeout_seconds)
+        except PollError as exc:
+            last_error = exc
+            if attempt == retries:
+                break
+            print(f"Feed fetch attempt {attempt}/{retries} failed: {exc}. Retrying...")
+            if retry_delay_seconds:
+                sleep(retry_delay_seconds)
+
+    raise PollError(f"Feed fetch failed after {retries} attempts: {last_error}")
+
+
 def normalize_entry(raw_entry: Any) -> FeedEntry | None:
+    # feedparser exposes RSS <guid> as "id"; FSC currently has no <guid>, so link is the normal fallback.
     entry_id = raw_entry.get("id") or raw_entry.get("guid") or raw_entry.get("link")
     if not entry_id:
         return None
@@ -66,4 +89,3 @@ def parse_entries(feed_bytes: bytes) -> tuple[str, list[FeedEntry]]:
 
     feed_title = str(parsed.feed.get("title") or "FSC RSS").strip()
     return feed_title, entries
-

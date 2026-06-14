@@ -41,6 +41,9 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FETCH_TIMEOUT_SECONDS: "60"
+          FETCH_RETRIES: "3"
+          FETCH_RETRY_DELAY_SECONDS: "10"
         run: uv run python main.py
 
       - name: Commit state changes
@@ -60,4 +63,3 @@ jobs:
       - name: Fail if polling failed
         if: steps.poll.outcome == 'failure'
         run: exit 1
-
