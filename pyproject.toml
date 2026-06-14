@@ -1,0 +1,10 @@
+[project]
+name = "fsc-rss-alert"
+version = "0.1.0"
+description = "Poll the FSC RSS feed and send Slack or Telegram alerts."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "feedparser==6.0.11",
+]
+
