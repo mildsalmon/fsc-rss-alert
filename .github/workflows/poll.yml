@@ -1,4 +1,4 @@
-name: FSC RSS Scheduled Poll
+name: Poll FSC RSS
 
 on:
   schedule:
