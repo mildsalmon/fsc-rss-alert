@@ -34,6 +34,13 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      - name: Debug FSC feed connectivity
+        continue-on-error: true
+        run: |
+          curl -Iv --max-time 20 \
+            -A "fsc-rss-alert/0.1 (+https://github.com/actions)" \
+            "https://www.fsc.go.kr/about/fsc_bbs_rss/?fid=0111"
+
       - name: Poll feed
         id: poll
         continue-on-error: true
@@ -63,4 +70,3 @@ jobs:
       - name: Fail if polling failed
         if: steps.poll.outcome == 'failure'
         run: exit 1
-
