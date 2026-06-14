@@ -8,6 +8,8 @@ from typing import Any
 
 from fsc_rss_alert.config import (
     DEFAULT_FAILURE_THRESHOLD,
+    DEFAULT_FETCH_RETRIES,
+    DEFAULT_FETCH_RETRY_DELAY_SECONDS,
     DEFAULT_NOTIFY_THROTTLE_SECONDS,
     DEFAULT_SEEN_LIMIT,
     DEFAULT_STATE_FILE,
@@ -88,13 +90,15 @@ def print_dry_run_summary(
 def run(args: argparse.Namespace) -> int:
     state_path = Path(args.state_file)
     timeout_seconds = int_from_env("FETCH_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS)
+    fetch_retries = int_from_env("FETCH_RETRIES", DEFAULT_FETCH_RETRIES)
+    fetch_retry_delay_seconds = float_from_env("FETCH_RETRY_DELAY_SECONDS", DEFAULT_FETCH_RETRY_DELAY_SECONDS)
     seen_limit = int_from_env("SEEN_ID_LIMIT", DEFAULT_SEEN_LIMIT)
     failure_threshold = int_from_env("FAILURE_ALERT_THRESHOLD", DEFAULT_FAILURE_THRESHOLD)
 
     state = load_state(state_path)
 
     try:
-        feed_bytes = fetch_feed(FEED_URL, timeout_seconds)
+        feed_bytes = fetch_feed(FEED_URL, timeout_seconds, fetch_retries, fetch_retry_delay_seconds)
         feed_title, entries = parse_entries(feed_bytes)
     except Exception as error:  # noqa: BLE001
         return record_failure(state_path, state, error, args.dry_run, timeout_seconds, failure_threshold)
