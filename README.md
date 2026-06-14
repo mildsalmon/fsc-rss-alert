@@ -27,14 +27,54 @@ SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..." uv run python main.py
 TELEGRAM_BOT_TOKEN="123:abc" TELEGRAM_CHAT_ID="123456789" uv run python main.py
 ```
 
-## GitHub Secrets
+## macOS 스케줄 실행
 
-GitHub 저장소의 `Settings` -> `Secrets and variables` -> `Actions`에서 아래 중 하나를 등록합니다.
+GitHub-hosted Actions에서 FSC 서버 `443` 포트 연결이 timeout될 수 있어, 기본 운영 방식은 로컬 macOS `launchd`입니다.
 
-- Slack: `SLACK_WEBHOOK_URL`
-- Telegram: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+먼저 `.env` 파일에 알림 채널을 설정합니다.
 
-워크플로는 `.github/workflows/poll.yml`에 있으며 20분마다 실행됩니다. 실행할 때마다 FSC RSS를 가져와 `guid`를 기준으로 새 글을 찾고, `guid`가 없으면 `link`를 중복 제거 키로 씁니다. `state.json`에는 최근 ID 약 50개를 저장합니다. 첫 실행은 기준선만 저장하고, 이후 새 항목이 여러 개 있으면 오래된 항목부터 알림을 보냅니다. fetch, 파싱, 알림 전송 중 실패하면 본문 ID 상태를 전진하지 않고, 연속 실패가 임계값에 도달하면 한 번 자가 알림을 보냅니다. `state.json`이 실제로 바뀐 경우에만 GitHub Actions가 커밋합니다.
+```bash
+printf 'SLACK_WEBHOOK_URL=%s\n' 'https://hooks.slack.com/services/...' > .env
+chmod 600 .env
+```
+
+스크립트가 단독으로 동작하는지 확인합니다.
+
+```bash
+chmod +x scripts/run_poll.sh
+./scripts/run_poll.sh
+```
+
+첫 실행은 현재 RSS 항목을 기준선으로 `state.json`에 저장하고 알림을 보내지 않습니다.
+
+`launchd`에 등록합니다.
+
+```bash
+mkdir -p logs
+cp launchd/com.mildsalmon.fsc-rss-alert.plist ~/Library/LaunchAgents/
+plutil -replace ProgramArguments.0 -string "$(pwd)/scripts/run_poll.sh" ~/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist
+plutil -replace WorkingDirectory -string "$(pwd)" ~/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist
+plutil -replace StandardOutPath -string "$(pwd)/logs/launchd.out.log" ~/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist
+plutil -replace StandardErrorPath -string "$(pwd)/logs/launchd.err.log" ~/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist
+launchctl enable "gui/$(id -u)/com.mildsalmon.fsc-rss-alert"
+launchctl kickstart -k "gui/$(id -u)/com.mildsalmon.fsc-rss-alert"
+```
+
+상태 확인:
+
+```bash
+launchctl print "gui/$(id -u)/com.mildsalmon.fsc-rss-alert"
+tail -f logs/launchd.out.log logs/launchd.err.log
+```
+
+해제:
+
+```bash
+launchctl bootout "gui/$(id -u)" ~/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist
+```
+
+`launchd`는 20분마다 `scripts/run_poll.sh`를 실행합니다. 실행할 때마다 FSC RSS를 가져와 `guid`를 기준으로 새 글을 찾고, `guid`가 없으면 `link`를 중복 제거 키로 씁니다. `state.json`에는 최근 ID 약 50개를 저장합니다. 첫 실행은 기준선만 저장하고, 이후 새 항목이 여러 개 있으면 오래된 항목부터 알림을 보냅니다. fetch, 파싱, 알림 전송 중 실패하면 본문 ID 상태를 전진하지 않고, 연속 실패가 임계값에 도달하면 한 번 자가 알림을 보냅니다.
 
 ## 설정값
 
