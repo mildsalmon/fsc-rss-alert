@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Sequence
+
+from feed_collector.application.dto import PollResult
+from feed_collector.application.port.output import AuditPort, NotifierPort, SourcePort, StatePort
+from feed_collector.application.service.dedup import dedup, with_dedup_key
+from feed_collector.domain import Item, SourceConfig
+
+
+def oldest_first(items: Sequence[Item]) -> list[Item]:
+    max_datetime = datetime.max.replace(tzinfo=timezone.utc)
+
+    def sort_key(item: Item) -> datetime:
+        if item.published is None:
+            return max_datetime
+        if item.published.tzinfo is None:
+            return item.published.replace(tzinfo=timezone.utc)
+        return item.published.astimezone(timezone.utc)
+
+    return sorted(items, key=sort_key)
+
+
+def resolve_channel_id(source: SourceConfig, state: StatePort) -> str:
+    channel_id = source.channel_id or state.get_channel_id(source.id)
+    if not channel_id:
+        raise ValueError(f"Source {source.id} has no channel_id")
+    return channel_id
+
+
+class PollService:
+    def __init__(
+        self,
+        source: SourceConfig,
+        adapter: SourcePort,
+        state: StatePort,
+        notifier: NotifierPort,
+        audit: AuditPort,
+    ) -> None:
+        self.source = source
+        self.adapter = adapter
+        self.state = state
+        self.notifier = notifier
+        self.audit = audit
+
+    def poll(self, *, dry_run: bool = False) -> PollResult:
+        items = [with_dedup_key(self.source.id, item) for item in self.adapter.fetch()]
+        first_run = self.state.is_first_run(self.source.id)
+
+        if first_run:
+            if not dry_run:
+                self.state.advance(self.source.id, items)
+            return PollResult(
+                source_id=self.source.id,
+                fetched_count=len(items),
+                new_count=0,
+                sent_count=0,
+                first_run=True,
+                dry_run=dry_run,
+                new_items=(),
+                sent_items=(),
+            )
+
+        new_items = oldest_first(dedup(self.source.id, items, self.state))
+        if dry_run:
+            return PollResult(
+                source_id=self.source.id,
+                fetched_count=len(items),
+                new_count=len(new_items),
+                sent_count=0,
+                first_run=False,
+                dry_run=True,
+                new_items=tuple(new_items),
+                sent_items=(),
+            )
+
+        channel_id = resolve_channel_id(self.source, self.state)
+        sent_items: list[Item] = []
+        for item in new_items:
+            self.notifier.send(channel_id, item)
+            self.audit.log(self.source.id, item)
+            self.state.mark_seen(self.source.id, item.item_id)
+            sent_items.append(item)
+
+        return PollResult(
+            source_id=self.source.id,
+            fetched_count=len(items),
+            new_count=len(new_items),
+            sent_count=len(sent_items),
+            first_run=False,
+            dry_run=False,
+            new_items=tuple(new_items),
+            sent_items=tuple(sent_items),
+        )
+
+
+def poll(
+    source: SourceConfig,
+    adapter: SourcePort,
+    state: StatePort,
+    notifier: NotifierPort,
+    audit: AuditPort,
+    *,
+    dry_run: bool = False,
+) -> PollResult:
+    return PollService(source, adapter, state, notifier, audit).poll(dry_run=dry_run)

@@ -5,8 +5,8 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Sequence
 
+from feed_collector.application.port.output import StatePort
 from feed_collector.domain import Item
-from feed_collector.ports import StatePort
 
 
 def content_hash_item_id(source_id: str, title: str, body: str, published: datetime | None) -> str:

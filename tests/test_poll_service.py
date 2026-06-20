@@ -6,8 +6,8 @@ from typing import Sequence
 
 import pytest
 
-from feed_collector.core.dedup import content_hash_item_id, dedup
-from feed_collector.core.poll import poll
+from feed_collector.application.service.dedup import content_hash_item_id, dedup
+from feed_collector.application.service.poll import PollService, poll
 from feed_collector.domain import Item, SourceConfig
 
 
@@ -112,6 +112,15 @@ def test_poll_first_run_stores_baseline_without_sending() -> None:
     assert state.advanced == items
     assert notifier.sent == []
     assert audit.logged == []
+
+
+def test_poll_service_implements_input_port_shape() -> None:
+    service = PollService(make_source(), FakeAdapter([]), FakeState(first_run=True), FakeNotifier(), FakeAudit())
+
+    result = service.poll(dry_run=True)
+
+    assert result.first_run is True
+    assert result.dry_run is True
 
 
 def test_poll_sends_new_items_oldest_first_and_marks_seen_after_audit() -> None:
