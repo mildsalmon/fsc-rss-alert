@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol, Sequence
 
+from feed_collector.application.port.base import OutputPort
 from feed_collector.domain import Item
 
 
-class StatePort(Protocol):
+class StatePort(OutputPort, Protocol):
     def is_first_run(self, source_id: str) -> bool: ...
 
     def seen_contains(self, source_id: str, item_id: str) -> bool: ...
