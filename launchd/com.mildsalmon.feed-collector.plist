@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.mildsalmon.fsc-rss-alert</string>
+  <string>com.mildsalmon.feed-collector</string>
 
   <key>ProgramArguments</key>
   <array>

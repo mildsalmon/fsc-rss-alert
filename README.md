@@ -1,4 +1,4 @@
-# FSC RSS Alert
+# Feed Collector
 
 금융위원회 보도자료 RSS를 주기적으로 확인하고 새 글을 Slack 또는 Telegram으로 보냅니다.
 v1은 FSC 피드 하나만 폴링하며, 첫 실행은 현재 피드를 기준선으로 저장하고 알림을 보내지 않습니다.
@@ -50,11 +50,11 @@ chmod +x scripts/run_poll.sh
 `launchd`에 등록합니다.
 
 ```bash
-PLIST="$HOME/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist"
+PLIST="$HOME/Library/LaunchAgents/com.mildsalmon.feed-collector.plist"
 REPO_DIR="$(pwd)"
 
 mkdir -p logs
-cp launchd/com.mildsalmon.fsc-rss-alert.plist "$PLIST"
+cp launchd/com.mildsalmon.feed-collector.plist "$PLIST"
 plutil -remove ProgramArguments "$PLIST" 2>/dev/null || true
 plutil -insert ProgramArguments -xml "<array><string>${REPO_DIR}/scripts/run_poll.sh</string></array>" "$PLIST"
 plutil -replace WorkingDirectory -string "$REPO_DIR" "$PLIST"
@@ -62,24 +62,24 @@ plutil -replace StandardOutPath -string "$REPO_DIR/logs/launchd.out.log" "$PLIST
 plutil -replace StandardErrorPath -string "$REPO_DIR/logs/launchd.err.log" "$PLIST"
 launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
-launchctl enable "gui/$(id -u)/com.mildsalmon.fsc-rss-alert"
-launchctl kickstart -k "gui/$(id -u)/com.mildsalmon.fsc-rss-alert"
+launchctl enable "gui/$(id -u)/com.mildsalmon.feed-collector"
+launchctl kickstart -k "gui/$(id -u)/com.mildsalmon.feed-collector"
 ```
 
 상태 확인:
 
 ```bash
-launchctl print "gui/$(id -u)/com.mildsalmon.fsc-rss-alert"
+launchctl print "gui/$(id -u)/com.mildsalmon.feed-collector"
 tail -f logs/launchd.out.log logs/launchd.err.log
 ```
 
 해제:
 
 ```bash
-launchctl bootout "gui/$(id -u)" ~/Library/LaunchAgents/com.mildsalmon.fsc-rss-alert.plist
+launchctl bootout "gui/$(id -u)" ~/Library/LaunchAgents/com.mildsalmon.feed-collector.plist
 ```
 
-`launchd`는 20분마다 `scripts/run_poll.sh`를 실행합니다. 실행할 때마다 FSC RSS를 가져와 `guid`를 기준으로 새 글을 찾고, `guid`가 없으면 `link`를 중복 제거 키로 씁니다. `state.json`에는 최근 ID 약 50개를 저장합니다. 첫 실행은 기준선만 저장하고, 이후 새 항목이 여러 개 있으면 오래된 항목부터 알림을 보냅니다. fetch, 파싱, 알림 전송 중 실패하면 본문 ID 상태를 전진하지 않고, 연속 실패가 임계값에 도달하면 한 번 자가 알림을 보냅니다.
+`launchd`는 20분마다 `scripts/run_poll.sh`를 실행합니다. 실행할 때마다 금융위 보도자료 RSS를 가져와 `guid`를 기준으로 새 글을 찾고, `guid`가 없으면 `link`를 중복 제거 키로 씁니다. `state.json`에는 최근 ID 약 50개를 저장합니다. 첫 실행은 기준선만 저장하고, 이후 새 항목이 여러 개 있으면 오래된 항목부터 알림을 보냅니다. fetch, 파싱, 알림 전송 중 실패하면 본문 ID 상태를 전진하지 않고, 연속 실패가 임계값에 도달하면 한 번 자가 알림을 보냅니다.
 
 ## 설정값
 

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fsc_rss_alert.errors import PollError
+from feed_collector.errors import PollError
 
 
 def utc_now_iso() -> str:
@@ -72,4 +72,3 @@ def record_failure_state(state: dict[str, Any], error: Exception) -> int:
     state["last_failure_at"] = utc_now_iso()
     state["last_error"] = str(error)[:500]
     return failure_count
-
