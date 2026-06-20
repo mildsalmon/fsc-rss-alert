@@ -1,12 +1,13 @@
-from feed_collector.application.service.dedup import content_hash_item_id, dedup, item_dedup_key, with_dedup_key
-from feed_collector.application.service.poll import PollService, oldest_first, poll
+from feed_collector.application.service.poll import PollService, filter_new_items, poll
+from feed_collector.domain.service import content_hash_item_id, item_dedup_key, oldest_first, unique_items, with_dedup_key
 
 __all__ = [
     "PollService",
     "content_hash_item_id",
-    "dedup",
+    "filter_new_items",
     "item_dedup_key",
     "oldest_first",
     "poll",
+    "unique_items",
     "with_dedup_key",
 ]

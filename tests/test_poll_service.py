@@ -6,9 +6,9 @@ from typing import Sequence
 
 import pytest
 
-from feed_collector.application.service.dedup import content_hash_item_id, dedup
-from feed_collector.application.service.poll import PollService, poll
+from feed_collector.application.service.poll import PollService, filter_new_items, poll
 from feed_collector.domain import Item, SourceConfig
+from feed_collector.domain.service import content_hash_item_id
 
 
 @dataclass
@@ -169,7 +169,7 @@ def test_dedup_filters_seen_and_batch_duplicates() -> None:
     state = FakeState(seen={"seen"})
     items = [make_item("seen"), make_item("fresh"), make_item("fresh")]
 
-    new_items = dedup("mofa", items, state)
+    new_items = filter_new_items("mofa", items, state)
 
     assert [item.item_id for item in new_items] == ["fresh"]
 
@@ -179,6 +179,6 @@ def test_dedup_uses_stable_content_hash_for_missing_item_id() -> None:
     item = Item(item_id="", title="same", link="", published=published)
     expected = content_hash_item_id("lawreq", "same", "", published)
 
-    new_items = dedup("lawreq", [item], FakeState())
+    new_items = filter_new_items("lawreq", [item], FakeState())
 
     assert new_items == [Item(item_id=expected, title="same", link="", published=published)]

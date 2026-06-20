@@ -5,7 +5,6 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Sequence
 
-from feed_collector.application.port.output import StatePort
 from feed_collector.domain import Item
 
 
@@ -30,17 +29,15 @@ def with_dedup_key(source_id: str, item: Item) -> Item:
     return replace(item, item_id=dedup_key)
 
 
-def dedup(source_id: str, items: Sequence[Item], state: StatePort) -> list[Item]:
-    new_items: list[Item] = []
-    batch_seen: set[str] = set()
+def unique_items(source_id: str, items: Sequence[Item]) -> list[Item]:
+    unique: list[Item] = []
+    seen: set[str] = set()
 
     for item in items:
         normalized = with_dedup_key(source_id, item)
-        if normalized.item_id in batch_seen:
+        if normalized.item_id in seen:
             continue
-        batch_seen.add(normalized.item_id)
-        if state.seen_contains(source_id, normalized.item_id):
-            continue
-        new_items.append(normalized)
+        seen.add(normalized.item_id)
+        unique.append(normalized)
 
-    return new_items
+    return unique

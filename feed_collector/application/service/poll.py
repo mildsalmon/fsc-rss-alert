@@ -1,25 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Sequence
 
 from feed_collector.application.dto import PollResult
-from feed_collector.application.port.output import AuditPort, NotifierPort, SourcePort, StatePort
-from feed_collector.application.service.dedup import dedup, with_dedup_key
+from feed_collector.application.port.output.audit import AuditPort
+from feed_collector.application.port.output.notifier import NotifierPort
+from feed_collector.application.port.output.source import SourcePort
+from feed_collector.application.port.output.state import StatePort
 from feed_collector.domain import Item, SourceConfig
-
-
-def oldest_first(items: Sequence[Item]) -> list[Item]:
-    max_datetime = datetime.max.replace(tzinfo=timezone.utc)
-
-    def sort_key(item: Item) -> datetime:
-        if item.published is None:
-            return max_datetime
-        if item.published.tzinfo is None:
-            return item.published.replace(tzinfo=timezone.utc)
-        return item.published.astimezone(timezone.utc)
-
-    return sorted(items, key=sort_key)
+from feed_collector.domain.service import oldest_first, unique_items, with_dedup_key
 
 
 def resolve_channel_id(source: SourceConfig, state: StatePort) -> str:
@@ -27,6 +16,10 @@ def resolve_channel_id(source: SourceConfig, state: StatePort) -> str:
     if not channel_id:
         raise ValueError(f"Source {source.id} has no channel_id")
     return channel_id
+
+
+def filter_new_items(source_id: str, items: Sequence[Item], state: StatePort) -> list[Item]:
+    return [item for item in unique_items(source_id, items) if not state.seen_contains(source_id, item.item_id)]
 
 
 class PollService:
@@ -62,7 +55,7 @@ class PollService:
                 sent_items=(),
             )
 
-        new_items = oldest_first(dedup(self.source.id, items, self.state))
+        new_items = oldest_first(filter_new_items(self.source.id, items, self.state))
         if dry_run:
             return PollResult(
                 source_id=self.source.id,

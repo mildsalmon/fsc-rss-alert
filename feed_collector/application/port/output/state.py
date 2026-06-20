@@ -6,10 +6,6 @@ from typing import Protocol, Sequence
 from feed_collector.domain import Item
 
 
-class SourcePort(Protocol):
-    def fetch(self) -> list[Item]: ...
-
-
 class StatePort(Protocol):
     def is_first_run(self, source_id: str) -> bool: ...
 
@@ -32,11 +28,3 @@ class StatePort(Protocol):
     def set_channel_id(self, source_id: str, channel_id: str) -> None: ...
 
     def digest_counts(self, since: datetime) -> dict[str, int]: ...
-
-
-class NotifierPort(Protocol):
-    def send(self, channel_id: str, item: Item) -> None: ...
-
-
-class AuditPort(Protocol):
-    def log(self, source_id: str, item: Item) -> None: ...
