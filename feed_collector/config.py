@@ -3,10 +3,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fsc_rss_alert.errors import PollError
+from feed_collector.errors import PollError
 
 
 FEED_URL = "https://www.fsc.go.kr/about/fsc_bbs_rss/?fid=0111"
+SOURCE_NAME = "금융위 보도자료"
 DEFAULT_STATE_FILE = Path("state.json")
 DEFAULT_SEEN_LIMIT = 50
 DEFAULT_FAILURE_THRESHOLD = 3
@@ -14,7 +15,7 @@ DEFAULT_TIMEOUT_SECONDS = 20
 DEFAULT_FETCH_RETRIES = 3
 DEFAULT_FETCH_RETRY_DELAY_SECONDS = 10.0
 DEFAULT_NOTIFY_THROTTLE_SECONDS = 1.0
-USER_AGENT = "fsc-rss-alert/0.1 (+https://github.com/actions)"
+USER_AGENT = "feed-collector/0.1 (+https://github.com/actions)"
 
 
 def int_from_env(name: str, default: int) -> int:

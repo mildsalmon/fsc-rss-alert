@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fsc_rss_alert.app import main
+from feed_collector.app import main
 
 
 if __name__ == "__main__":

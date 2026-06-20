@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fsc_rss_alert.config import (
+from feed_collector.config import (
     DEFAULT_FAILURE_THRESHOLD,
     DEFAULT_FETCH_RETRIES,
     DEFAULT_FETCH_RETRY_DELAY_SECONDS,
@@ -15,17 +15,18 @@ from fsc_rss_alert.config import (
     DEFAULT_STATE_FILE,
     DEFAULT_TIMEOUT_SECONDS,
     FEED_URL,
+    SOURCE_NAME,
     float_from_env,
     int_from_env,
 )
-from fsc_rss_alert.feed import FeedEntry, fetch_feed, parse_entries
-from fsc_rss_alert.notify import (
+from feed_collector.feed import FeedEntry, fetch_feed, parse_entries
+from feed_collector.notify import (
     ConsoleNotifier,
     build_notifier,
     format_entry_message,
     format_failure_message,
 )
-from fsc_rss_alert.state import (
+from feed_collector.state import (
     has_failure_state,
     load_state,
     merge_seen_ids,
@@ -147,7 +148,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Poll the FSC RSS feed and send new item alerts.")
+    parser = argparse.ArgumentParser(description=f"Poll the {SOURCE_NAME} feed and send new item alerts.")
     parser.add_argument("--dry-run", action="store_true", help="Print actions instead of sending alerts or writing state.")
     parser.add_argument("--state-file", default=str(DEFAULT_STATE_FILE), help="Path to the JSON state file.")
     return parser.parse_args()

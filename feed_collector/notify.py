@@ -5,8 +5,9 @@ import os
 import urllib.parse
 import urllib.request
 
-from fsc_rss_alert.errors import PollError
-from fsc_rss_alert.feed import FeedEntry
+from feed_collector.config import SOURCE_NAME
+from feed_collector.errors import PollError
+from feed_collector.feed import FeedEntry
 
 
 class Notifier:
@@ -85,8 +86,7 @@ def build_notifier(dry_run: bool, timeout_seconds: int) -> Notifier:
 
 def format_entry_message(entry: FeedEntry) -> str:
     parts = [
-        "FSC 새 보도자료",
-        f"제목: {entry.title}",
+        f"> 제목: *{entry.title}*",
     ]
     if entry.published:
         parts.append(f"날짜: {entry.published}")
@@ -95,13 +95,12 @@ def format_entry_message(entry: FeedEntry) -> str:
     return "\n".join(parts)
 
 
-def format_failure_message(error: Exception, failure_count: int) -> str:
+def format_failure_message(error: Exception, failure_count: int, source_name: str = SOURCE_NAME) -> str:
     error_text = str(error).replace("\n", " ")[:500]
     return "\n".join(
         [
-            "FSC RSS 폴링 실패",
+            f"> *{source_name} 폴링 실패*",
             f"연속 실패: {failure_count}회",
             f"오류: {error_text}",
         ]
     )
-

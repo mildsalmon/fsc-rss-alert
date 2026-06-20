@@ -8,8 +8,8 @@ from typing import Any
 
 import feedparser
 
-from fsc_rss_alert.config import USER_AGENT
-from fsc_rss_alert.errors import PollError
+from feed_collector.config import SOURCE_NAME, USER_AGENT
+from feed_collector.errors import PollError
 
 
 @dataclass(frozen=True)
@@ -58,7 +58,7 @@ def fetch_feed(
 
 
 def normalize_entry(raw_entry: Any) -> FeedEntry | None:
-    # feedparser exposes RSS <guid> as "id"; FSC currently has no <guid>, so link is the normal fallback.
+    # feedparser exposes RSS <guid> as "id"; the current source normally falls back to link.
     entry_id = raw_entry.get("id") or raw_entry.get("guid") or raw_entry.get("link")
     if not entry_id:
         return None
@@ -87,5 +87,5 @@ def parse_entries(feed_bytes: bytes) -> tuple[str, list[FeedEntry]]:
     if not entries:
         raise PollError("Feed entries did not include guid or link values")
 
-    feed_title = str(parsed.feed.get("title") or "FSC RSS").strip()
+    feed_title = str(parsed.feed.get("title") or SOURCE_NAME).strip()
     return feed_title, entries

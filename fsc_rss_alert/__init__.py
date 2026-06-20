@@ -1,2 +1,0 @@
-"""FSC RSS alert bot."""
-
