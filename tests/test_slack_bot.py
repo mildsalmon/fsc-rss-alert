@@ -1,0 +1,136 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any
+
+import pytest
+
+from feed_collector.adapter.outbound import (
+    SlackApiError,
+    SlackBotNotifier,
+    SlackChannelManager,
+    feed_channel_name,
+    format_slack_item_message,
+)
+from feed_collector.domain import Item
+
+
+@dataclass
+class FakeResponse:
+    data: dict[str, Any]
+
+    def json(self) -> dict[str, Any]:
+        return self.data
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+@dataclass
+class FakeSlackSession:
+    post_responses: list[FakeResponse]
+    get_responses: list[FakeResponse] = field(default_factory=list)
+    posts: list[dict[str, Any]] = field(default_factory=list)
+    gets: list[dict[str, Any]] = field(default_factory=list)
+
+    def post(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        json: Mapping[str, object],
+        timeout: float,
+    ) -> FakeResponse:
+        self.posts.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        return self.post_responses.pop(0)
+
+    def get(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        params: Mapping[str, str],
+        timeout: float,
+    ) -> FakeResponse:
+        self.gets.append({"url": url, "headers": headers, "params": params, "timeout": timeout})
+        return self.get_responses.pop(0)
+
+
+def make_item() -> Item:
+    return Item(
+        item_id="item-1",
+        title=" Policy update ",
+        link="https://example.test/policy",
+        published=datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc),
+    )
+
+
+def test_format_slack_item_message_preserves_title_date_link() -> None:
+    assert (
+        format_slack_item_message(make_item())
+        == "Policy update\nDate: 2026-01-02T03:04:05+00:00\nLink: https://example.test/policy"
+    )
+
+
+def test_slack_bot_notifier_posts_chat_message() -> None:
+    session = FakeSlackSession([FakeResponse({"ok": True, "ts": "123.456"})])
+    notifier = SlackBotNotifier(bot_token="xoxb-test", session=session, timeout_seconds=3)
+
+    notifier.send("C123", make_item())
+
+    assert len(session.posts) == 1
+    post = session.posts[0]
+    assert post["url"] == "https://slack.com/api/chat.postMessage"
+    assert post["headers"]["Authorization"] == "Bearer xoxb-test"
+    assert post["timeout"] == 3
+    assert post["json"] == {
+        "channel": "C123",
+        "text": "Policy update\nDate: 2026-01-02T03:04:05+00:00\nLink: https://example.test/policy",
+        "unfurl_links": False,
+    }
+
+
+def test_slack_bot_notifier_raises_for_slack_error() -> None:
+    session = FakeSlackSession([FakeResponse({"ok": False, "error": "channel_not_found"})])
+    notifier = SlackBotNotifier(bot_token="xoxb-test", session=session)
+
+    with pytest.raises(SlackApiError, match="chat.postMessage failed: channel_not_found"):
+        notifier.send("C404", make_item())
+
+
+def test_slack_channel_manager_reuses_existing_channel_on_name_taken() -> None:
+    session = FakeSlackSession(
+        post_responses=[FakeResponse({"ok": False, "error": "name_taken"})],
+        get_responses=[
+            FakeResponse(
+                {
+                    "ok": True,
+                    "channels": [{"id": "CFEED", "name": "feed-feed-ops"}],
+                    "response_metadata": {"next_cursor": ""},
+                }
+            )
+        ],
+    )
+    manager = SlackChannelManager(bot_token="xoxb-test", session=session)
+
+    channel_id = manager.ensure_feed_channel("feed ops")
+
+    assert channel_id == "CFEED"
+    assert session.posts[0]["url"] == "https://slack.com/api/conversations.create"
+    assert session.posts[0]["json"] == {"name": "feed-feed-ops"}
+    assert session.gets[0]["url"] == "https://slack.com/api/conversations.list"
+
+
+def test_slack_channel_manager_creates_feed_channel() -> None:
+    session = FakeSlackSession([FakeResponse({"ok": True, "channel": {"id": "CNEW"}})])
+    manager = SlackChannelManager(bot_token="xoxb-test", session=session)
+
+    assert manager.ensure_feed_channel("FSC notices") == "CNEW"
+    assert session.posts[0]["json"] == {"name": "feed-fsc-notices"}
+
+
+def test_feed_channel_name_is_deterministic() -> None:
+    assert feed_channel_name("Feed Ops!") == "feed-feed-ops"
+    assert feed_channel_name("  ") == "feed-source"
