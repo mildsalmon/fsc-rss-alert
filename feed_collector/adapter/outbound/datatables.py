@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil import parser
 import requests
@@ -13,7 +13,15 @@ from feed_collector.domain import Item, ParamValue, SourceConfig
 
 
 DEFAULT_LENGTH = 30
-KST = ZoneInfo("Asia/Seoul")
+DEFAULT_PUBLISHED_TIMEZONE = "Asia/Seoul"
+ADAPTER_PARAM_KEYS = frozenset(
+    {
+        "item_id_field",
+        "title_field",
+        "published_field",
+        "published_timezone",
+    }
+)
 
 
 class DataTablesAdapterError(ValueError):
@@ -25,10 +33,16 @@ class DataTablesAdapter(SourcePort):
         self.cfg = cfg
 
     def fetch(self) -> list[Item]:
-        response = requests.post(self.cfg.url, data=build_request(self.cfg), timeout=20)
-        response.raise_for_status()
+        try:
+            response = requests.post(self.cfg.url, data=build_request(self.cfg), timeout=20)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise DataTablesAdapterError(f"Source {self.cfg.id} DataTables request failed: {exc}") from exc
 
-        payload = response.json()
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise DataTablesAdapterError(f"Source {self.cfg.id} DataTables response was not valid JSON") from exc
         rows = rows_at_path(payload, self.cfg)
         if not rows and self.cfg.empty_result_policy == "error":
             raise DataTablesAdapterError(f"Source {self.cfg.id} returned no rows")
@@ -43,7 +57,7 @@ def build_request(cfg: SourceConfig) -> dict[str, ParamValue]:
         "start": 0,
         "length": DEFAULT_LENGTH,
     }
-    request.update(cfg.params)
+    request.update({key: value for key, value in cfg.params.items() if key not in ADAPTER_PARAM_KEYS})
     return request
 
 
@@ -71,19 +85,30 @@ def rows_at_path(payload: object, cfg: SourceConfig) -> list[Mapping[str, Any]]:
 
 
 def map_row(row: Mapping[str, Any], cfg: SourceConfig) -> Item:
-    lawreq_idx = required(row, "lawreqIdx", cfg)
-    title = required(row, "title", cfg)
-    reg_dt = required(row, "regDt", cfg)
+    item_id_field = field_param(cfg, "item_id_field")
+    title_field = field_param(cfg, "title_field")
+    published_field = field_param(cfg, "published_field")
+
+    item_id = required(row, item_id_field, cfg)
+    title = required(row, title_field, cfg)
+    published_value = required(row, published_field, cfg)
 
     if cfg.detail_url is None:
         raise DataTablesAdapterError(f"Source {cfg.id} requires detail_url")
 
     return Item(
-        item_id=str(lawreq_idx),
+        item_id=str(item_id),
         title=str(title),
-        link=cfg.detail_url.format(id=lawreq_idx),
-        published=parse_kst_reg_dt(reg_dt, cfg),
+        link=cfg.detail_url.format(id=item_id),
+        published=parse_published(published_value, cfg, published_field),
     )
+
+
+def field_param(cfg: SourceConfig, param: str) -> str:
+    value = cfg.params.get(param)
+    if not isinstance(value, str) or not value.strip():
+        raise DataTablesAdapterError(f"Source {cfg.id} requires params.{param}")
+    return value.strip()
 
 
 def required(row: Mapping[str, Any], field: str, cfg: SourceConfig) -> Any:
@@ -93,25 +118,35 @@ def required(row: Mapping[str, Any], field: str, cfg: SourceConfig) -> Any:
     return value
 
 
-def parse_kst_reg_dt(value: object, cfg: SourceConfig) -> datetime:
+def parse_published(value: object, cfg: SourceConfig, field: str) -> datetime:
     if not isinstance(value, str):
-        raise DataTablesAdapterError(f"Source {cfg.id} regDt must be a string")
+        raise DataTablesAdapterError(f"Source {cfg.id} field {field!r} must be a string")
     try:
         parsed = parser.parse(value)
     except (OverflowError, ValueError) as exc:
-        raise DataTablesAdapterError(f"Source {cfg.id} has invalid regDt {value!r}") from exc
+        raise DataTablesAdapterError(f"Source {cfg.id} has invalid {field} {value!r}") from exc
+    timezone = published_timezone(cfg)
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=KST)
-    return parsed.astimezone(KST)
+        return parsed.replace(tzinfo=timezone)
+    return parsed.astimezone(timezone)
+
+
+def published_timezone(cfg: SourceConfig) -> ZoneInfo:
+    raw_timezone = cfg.params.get("published_timezone", DEFAULT_PUBLISHED_TIMEZONE)
+    if not isinstance(raw_timezone, str) or not raw_timezone.strip():
+        raise DataTablesAdapterError(f"Source {cfg.id} params.published_timezone must be a timezone name")
+    try:
+        return ZoneInfo(raw_timezone)
+    except ZoneInfoNotFoundError as exc:
+        raise DataTablesAdapterError(f"Source {cfg.id} has unknown timezone {raw_timezone!r}") from exc
 
 
 def assert_newest_first(rows: list[Mapping[str, Any]], cfg: SourceConfig) -> None:
+    published_field = field_param(cfg, "published_field")
     previous: datetime | None = None
     for index, row in enumerate(rows):
-        reg_dt = row.get("regDt")
-        if reg_dt in (None, ""):
-            continue
-        current = parse_kst_reg_dt(reg_dt, cfg)
+        published_value = required(row, published_field, cfg)
+        current = parse_published(published_value, cfg, published_field)
         if previous is not None and current > previous:
             raise DataTablesAdapterError(f"Source {cfg.id} rows are not newest-first at index {index}")
         previous = current

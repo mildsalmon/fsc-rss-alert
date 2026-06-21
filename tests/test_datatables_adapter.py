@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
+import requests
 
 from feed_collector.adapter.outbound.datatables import (
     DEFAULT_LENGTH,
@@ -23,6 +24,13 @@ def make_source(
     detail_url: str | None = "https://example.test/lawreq/{id}",
     empty_result_policy: EmptyResultPolicy = "error",
 ) -> SourceConfig:
+    default_params: dict[str, ParamValue] = {
+        "item_id_field": "lawreqIdx",
+        "title_field": "title",
+        "published_field": "regDt",
+        "published_timezone": "Asia/Seoul",
+    }
+    default_params.update(params or {})
     return SourceConfig(
         id="fsc-lawreq",
         slug="fsc-lawreq",
@@ -32,7 +40,7 @@ def make_source(
         channel_id=None,
         interval_minutes=30,
         url="https://example.test/datatables",
-        params=params or {},
+        params=default_params,
         list_path=list_path,
         detail_url=detail_url,
         empty_result_policy=empty_result_policy,
@@ -81,6 +89,28 @@ def test_map_row_to_item_link_and_kst_published() -> None:
     assert offset.total_seconds() == 9 * 60 * 60
 
 
+def test_map_row_uses_configured_field_names() -> None:
+    cfg = make_source(
+        params={
+            "item_id_field": "idx",
+            "title_field": "subject",
+            "published_field": "createdAt",
+            "published_timezone": "UTC",
+        },
+        detail_url="https://example.test/detail/{id}",
+    )
+
+    item = map_row({"idx": "abc", "subject": "Custom row", "createdAt": "2026-06-21 09:30:00"}, cfg)
+
+    assert item.item_id == "abc"
+    assert item.title == "Custom row"
+    assert item.link == "https://example.test/detail/abc"
+    assert item.published is not None
+    offset = item.published.utcoffset()
+    assert offset is not None
+    assert offset.total_seconds() == 0
+
+
 def test_map_row_converts_aware_reg_dt_to_kst() -> None:
     item = map_row(
         {"lawreqIdx": "abc", "title": "Notice", "regDt": "2026-06-21T00:30:00Z"},
@@ -106,6 +136,20 @@ def test_map_row_converts_aware_reg_dt_to_kst() -> None:
 def test_map_row_missing_or_invalid_required_fields_fail(row: dict[str, object], match: str) -> None:
     with pytest.raises(DataTablesAdapterError, match=match):
         map_row(row, make_source())
+
+
+def test_map_row_requires_configured_field_mapping() -> None:
+    cfg = make_source(params={"item_id_field": None})
+
+    with pytest.raises(DataTablesAdapterError, match="requires params.item_id_field"):
+        map_row({"lawreqIdx": 1, "title": "Title", "regDt": "2026-06-21"}, cfg)
+
+
+def test_map_row_rejects_unknown_timezone() -> None:
+    cfg = make_source(params={"published_timezone": "Not/AZone"})
+
+    with pytest.raises(DataTablesAdapterError, match="unknown timezone"):
+        map_row({"lawreqIdx": 1, "title": "Title", "regDt": "2026-06-21"}, cfg)
 
 
 def test_rows_at_path_rejects_structure_change() -> None:
@@ -167,6 +211,37 @@ def test_fetch_posts_datatables_request_and_maps_rows(monkeypatch: pytest.Monkey
     assert [item.item_id for item in items] == ["7"]
 
 
+def test_fetch_wraps_http_errors_with_source_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            raise requests.HTTPError("503 Service Unavailable")
+
+    monkeypatch.setattr(
+        "feed_collector.adapter.outbound.datatables.requests.post",
+        lambda url, *, data, timeout: FakeResponse(),
+    )
+
+    with pytest.raises(DataTablesAdapterError, match="Source fsc-lawreq DataTables request failed"):
+        DataTablesAdapter(make_source()).fetch()
+
+
+def test_fetch_wraps_invalid_json_with_source_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> object:
+            raise ValueError("not json")
+
+    monkeypatch.setattr(
+        "feed_collector.adapter.outbound.datatables.requests.post",
+        lambda url, *, data, timeout: FakeResponse(),
+    )
+
+    with pytest.raises(DataTablesAdapterError, match="Source fsc-lawreq DataTables response was not valid JSON"):
+        DataTablesAdapter(make_source()).fetch()
+
+
 def test_fetch_empty_result_policy_error(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeResponse:
         def raise_for_status(self) -> None:
@@ -182,3 +257,19 @@ def test_fetch_empty_result_policy_error(monkeypatch: pytest.MonkeyPatch) -> Non
 
     with pytest.raises(DataTablesAdapterError, match="returned no rows"):
         DataTablesAdapter(make_source()).fetch()
+
+
+def test_fetch_empty_result_policy_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict[str, object]:
+            return {"data": []}
+
+    monkeypatch.setattr(
+        "feed_collector.adapter.outbound.datatables.requests.post",
+        lambda url, *, data, timeout: FakeResponse(),
+    )
+
+    assert DataTablesAdapter(make_source(empty_result_policy="valid")).fetch() == []
