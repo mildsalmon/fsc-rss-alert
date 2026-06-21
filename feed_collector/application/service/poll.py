@@ -11,17 +11,6 @@ from feed_collector.domain import Item, SourceConfig
 from feed_collector.domain.service import oldest_first, unique_items, with_dedup_key
 
 
-def resolve_channel_id(source: SourceConfig, state: StatePort) -> str:
-    channel_id = source.channel_id or state.get_channel_id(source.id)
-    if not channel_id:
-        raise ValueError(f"Source {source.id} has no channel_id")
-    return channel_id
-
-
-def filter_new_items(source_id: str, items: Sequence[Item], state: StatePort) -> list[Item]:
-    return [item for item in unique_items(source_id, items) if not state.seen_contains(source_id, item.item_id)]
-
-
 class PollService:
     def __init__(
         self,
@@ -55,7 +44,7 @@ class PollService:
                 sent_items=(),
             )
 
-        new_items = oldest_first(filter_new_items(self.source.id, items, self.state))
+        new_items = oldest_first(self._filter_new_items(items))
         if dry_run:
             return PollResult(
                 source_id=self.source.id,
@@ -68,8 +57,8 @@ class PollService:
                 sent_items=(),
             )
 
-        channel_id = resolve_channel_id(self.source, self.state)
-        sent_items: list[Item] = []
+        channel_id = self._resolve_channel_id()
+        sent_items = []
         for item in new_items:
             self.notifier.send(channel_id, item)
             self.audit.log(self.source.id, item)
@@ -86,6 +75,15 @@ class PollService:
             new_items=tuple(new_items),
             sent_items=tuple(sent_items),
         )
+
+    def _filter_new_items(self, items: Sequence[Item]) -> list[Item]:
+        return [item for item in unique_items(self.source.id, items) if not self.state.seen_contains(self.source.id, item.item_id)]
+
+    def _resolve_channel_id(self) -> str:
+        channel_id = self.source.channel_id or self.state.get_channel_id(self.source.id)
+        if not channel_id:
+            raise ValueError(f"Source {self.source.id} has no channel_id")
+        return channel_id
 
 
 def poll(

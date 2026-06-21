@@ -6,7 +6,7 @@ from typing import Sequence
 
 import pytest
 
-from feed_collector.application.service.poll import PollService, filter_new_items, poll
+from feed_collector.application.service.poll import PollService, poll
 from feed_collector.domain import Item, SourceConfig
 from feed_collector.domain.service import content_hash_item_id
 
@@ -169,16 +169,16 @@ def test_dedup_filters_seen_and_batch_duplicates() -> None:
     state = FakeState(seen={"seen"})
     items = [make_item("seen"), make_item("fresh"), make_item("fresh")]
 
-    new_items = filter_new_items("mofa", items, state)
+    result = poll(make_source(), FakeAdapter(items), state, FakeNotifier(), FakeAudit(), dry_run=True)
 
-    assert [item.item_id for item in new_items] == ["fresh"]
+    assert [item.item_id for item in result.new_items] == ["fresh"]
 
 
 def test_dedup_uses_stable_content_hash_for_missing_item_id() -> None:
     published = datetime(2026, 1, 1, tzinfo=timezone.utc)
     item = Item(item_id="", title="same", link="", published=published)
-    expected = content_hash_item_id("lawreq", "same", "", published)
+    expected = content_hash_item_id("mofa", "same", "", published)
 
-    new_items = filter_new_items("lawreq", [item], FakeState())
+    result = poll(make_source(), FakeAdapter([item]), FakeState(), FakeNotifier(), FakeAudit(), dry_run=True)
 
-    assert new_items == [Item(item_id=expected, title="same", link="", published=published)]
+    assert result.new_items == (Item(item_id=expected, title="same", link="", published=published),)
