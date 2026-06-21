@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Sequence
 
 from feed_collector.application.dto import PollResult
+from feed_collector.application.port.input.poll import PollInputPort
 from feed_collector.application.port.output.audit import AuditPort
 from feed_collector.application.port.output.notifier import NotifierPort
 from feed_collector.application.port.output.source import SourcePort
@@ -11,7 +12,7 @@ from feed_collector.domain import Item, SourceConfig
 from feed_collector.domain.service import oldest_first, unique_items, with_dedup_key
 
 
-class PollService:
+class PollService(PollInputPort):
     def __init__(
         self,
         source: SourceConfig,
@@ -84,15 +85,3 @@ class PollService:
         if not channel_id:
             raise ValueError(f"Source {self.source.id} has no channel_id")
         return channel_id
-
-
-def poll(
-    source: SourceConfig,
-    adapter: SourcePort,
-    state: StatePort,
-    notifier: NotifierPort,
-    audit: AuditPort,
-    *,
-    dry_run: bool = False,
-) -> PollResult:
-    return PollService(source, adapter, state, notifier, audit).poll(dry_run=dry_run)

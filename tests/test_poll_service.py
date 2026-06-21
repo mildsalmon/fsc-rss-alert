@@ -6,7 +6,8 @@ from typing import Sequence
 
 import pytest
 
-from feed_collector.application.service.poll import PollService, poll
+from feed_collector.application.port.input.poll import PollInputPort
+from feed_collector.application.service.poll import PollService
 from feed_collector.domain import Item, SourceConfig
 from feed_collector.domain.service import content_hash_item_id
 
@@ -99,13 +100,22 @@ def make_item(item_id: str, published: datetime | None = None) -> Item:
     return Item(item_id=item_id, title=f"title {item_id}", link=f"https://example.test/{item_id}", published=published)
 
 
+def make_service(
+    items: list[Item],
+    state: FakeState,
+    notifier: FakeNotifier | None = None,
+    audit: FakeAudit | None = None,
+) -> PollService:
+    return PollService(make_source(), FakeAdapter(items), state, notifier or FakeNotifier(), audit or FakeAudit())
+
+
 def test_poll_first_run_stores_baseline_without_sending() -> None:
     items = [make_item("newest"), make_item("oldest")]
     state = FakeState(first_run=True)
     notifier = FakeNotifier()
     audit = FakeAudit()
 
-    result = poll(make_source(), FakeAdapter(items), state, notifier, audit)
+    result = make_service(items, state, notifier, audit).poll()
 
     assert result.first_run is True
     assert result.sent_count == 0
@@ -116,8 +126,9 @@ def test_poll_first_run_stores_baseline_without_sending() -> None:
 
 def test_poll_service_implements_input_port_shape() -> None:
     service = PollService(make_source(), FakeAdapter([]), FakeState(first_run=True), FakeNotifier(), FakeAudit())
+    input_port: PollInputPort = service
 
-    result = service.poll(dry_run=True)
+    result = input_port.poll(dry_run=True)
 
     assert result.first_run is True
     assert result.dry_run is True
@@ -130,7 +141,7 @@ def test_poll_sends_new_items_oldest_first_and_marks_seen_after_audit() -> None:
     notifier = FakeNotifier()
     audit = FakeAudit()
 
-    result = poll(make_source(), FakeAdapter([newer, older]), state, notifier, audit)
+    result = make_service([newer, older], state, notifier, audit).poll()
 
     assert result.new_items == (older, newer)
     assert [item.item_id for _, item in notifier.sent] == ["older", "newer"]
@@ -144,7 +155,7 @@ def test_poll_send_failure_does_not_mark_failed_item_seen() -> None:
     notifier = FakeNotifier(fail_on="fails")
 
     with pytest.raises(RuntimeError, match="send failed"):
-        poll(make_source(), FakeAdapter([item]), state, notifier, FakeAudit())
+        make_service([item], state, notifier, FakeAudit()).poll()
 
     assert state.marked == []
     assert "fails" not in state.seen
@@ -156,7 +167,7 @@ def test_poll_dry_run_skips_writes_and_delivery() -> None:
     notifier = FakeNotifier()
     audit = FakeAudit()
 
-    result = poll(make_source(), FakeAdapter([item]), state, notifier, audit, dry_run=True)
+    result = make_service([item], state, notifier, audit).poll(dry_run=True)
 
     assert result.dry_run is True
     assert result.new_items == (item,)
@@ -169,7 +180,7 @@ def test_dedup_filters_seen_and_batch_duplicates() -> None:
     state = FakeState(seen={"seen"})
     items = [make_item("seen"), make_item("fresh"), make_item("fresh")]
 
-    result = poll(make_source(), FakeAdapter(items), state, FakeNotifier(), FakeAudit(), dry_run=True)
+    result = make_service(items, state).poll(dry_run=True)
 
     assert [item.item_id for item in result.new_items] == ["fresh"]
 
@@ -179,6 +190,6 @@ def test_dedup_uses_stable_content_hash_for_missing_item_id() -> None:
     item = Item(item_id="", title="same", link="", published=published)
     expected = content_hash_item_id("mofa", "same", "", published)
 
-    result = poll(make_source(), FakeAdapter([item]), FakeState(), FakeNotifier(), FakeAudit(), dry_run=True)
+    result = make_service([item], FakeState()).poll(dry_run=True)
 
     assert result.new_items == (Item(item_id=expected, title="same", link="", published=published),)
