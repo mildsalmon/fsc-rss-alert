@@ -87,5 +87,6 @@ def parse_entries(feed_bytes: bytes) -> tuple[str, list[FeedEntry]]:
     if not entries:
         raise PollError("Feed entries did not include guid or link values")
 
-    feed_title = str(parsed.feed.get("title") or SOURCE_NAME).strip()
+    feed_metadata: Any = parsed.feed
+    feed_title = str(feed_metadata.get("title") or SOURCE_NAME).strip()
     return feed_title, entries
