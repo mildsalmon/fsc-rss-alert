@@ -78,8 +78,9 @@ def test_slack_bot_notifier_posts_chat_message() -> None:
     session = FakeSlackSession([FakeResponse({"ok": True, "ts": "123.456"})])
     notifier = SlackBotNotifier(bot_token="xoxb-test", session=session, timeout_seconds=3)
 
-    notifier.send("C123", make_item())
+    delivery_id = notifier.send("C123", make_item())
 
+    assert delivery_id == "123.456"
     assert len(session.posts) == 1
     post = session.posts[0]
     assert post["url"] == "https://slack.com/api/chat.postMessage"

@@ -65,8 +65,8 @@ class SlackBotNotifier(NotifierPort):
         self.timeout_seconds = timeout_seconds
         self.api_base_url = api_base_url.rstrip("/")
 
-    def send(self, channel_id: str, item: Item) -> None:
-        self._request(
+    def send(self, channel_id: str, item: Item) -> str | None:
+        data = self._request(
             "chat.postMessage",
             {
                 "channel": channel_id,
@@ -74,6 +74,8 @@ class SlackBotNotifier(NotifierPort):
                 "unfurl_links": False,
             },
         )
+        ts = data.get("ts")
+        return ts if isinstance(ts, str) else None
 
     def _request(self, method: str, payload: Mapping[str, object]) -> Mapping[str, Any]:
         if not self.bot_token:

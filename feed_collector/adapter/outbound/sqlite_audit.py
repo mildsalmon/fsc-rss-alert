@@ -13,8 +13,22 @@ class SqliteAuditLog(SqliteRepoBase, AuditPort):
         self.retention_days = retention_days
         super().__init__(db_path)
 
-    def log(self, source_id: str, item: Item) -> None:
-        self.log_delivery(source_id, item, status="sent")
+    def log(
+        self,
+        source_id: str,
+        item: Item,
+        *,
+        channel_id: str | None = None,
+        delivery_id: str | None = None,
+        status: str = "sent",
+    ) -> None:
+        self.log_delivery(
+            source_id,
+            item,
+            channel_id=channel_id,
+            slack_ts=delivery_id,
+            status=status,
+        )
 
     def log_delivery(
         self,

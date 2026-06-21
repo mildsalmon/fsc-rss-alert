@@ -52,13 +52,13 @@ def test_sqlite_audit_log_existing_port_log_remains_supported(tmp_path: Path) ->
     db_path = tmp_path / "feed.db"
 
     with SqliteAuditLog(db_path) as audit:
-        audit.log("mofa", make_item())
+        audit.log("mofa", make_item(), channel_id="C123", delivery_id="123.456")
 
     rows = audit_rows(db_path)
     assert len(rows) == 1
     assert rows[0]["status"] == "sent"
-    assert rows[0]["channel_id"] is None
-    assert rows[0]["slack_ts"] is None
+    assert rows[0]["channel_id"] == "C123"
+    assert rows[0]["slack_ts"] == "123.456"
 
 
 def test_sqlite_audit_log_prunes_rows_older_than_retention(tmp_path: Path) -> None:
