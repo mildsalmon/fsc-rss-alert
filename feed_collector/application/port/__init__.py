@@ -1,4 +1,4 @@
 from feed_collector.application.port.input import PollInputPort
-from feed_collector.application.port.output import AuditPort, NotifierPort, SourcePort, StatePort
+from feed_collector.application.port.output import AuditPort, ChannelResolverPort, NotifierPort, SeenStatePort, SourcePort
 
-__all__ = ["AuditPort", "NotifierPort", "PollInputPort", "SourcePort", "StatePort"]
+__all__ = ["AuditPort", "ChannelResolverPort", "NotifierPort", "PollInputPort", "SeenStatePort", "SourcePort"]
