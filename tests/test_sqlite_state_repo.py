@@ -6,7 +6,13 @@ from multiprocessing import Process, Queue
 from pathlib import Path
 from typing import Any
 
-from feed_collector.adapter.outbound import SqliteStateRepo, try_acquire_poll_lock
+from feed_collector.adapter.outbound import (
+    SqliteChannelRepo,
+    SqliteSourceStateRepo,
+    SqliteStateRepo,
+    try_acquire_poll_lock,
+)
+from feed_collector.application.port.output import ChannelResolverPort, SeenStatePort, SourceStatePort
 from feed_collector.domain import Item, SourceConfig
 from feed_collector.domain.service import item_dedup_key
 
@@ -61,15 +67,18 @@ def child_try_lock(lock_path: str, queue: Queue[Any]) -> None:
         lock.release()
 
 
-def test_sqlite_state_repo_creates_schema_and_preserves_sqlite_channel_id(tmp_path: Path) -> None:
+def test_sqlite_repos_create_schema_and_keep_channel_state_separate(tmp_path: Path) -> None:
     db_path = tmp_path / "feed.db"
 
-    with SqliteStateRepo(db_path) as repo:
-        repo.ensure_source(make_source("mofa", channel_id="C_CONFIG"))
-        repo.set_channel_id("mofa", "C_SQLITE")
-        repo.ensure_source(make_source("mofa", channel_id="C_CONFIG_CHANGED"))
+    with SqliteSourceStateRepo(db_path) as source_repo:
+        source_repo.ensure_source(make_source("mofa", channel_id="C_CONFIG"))
+    with SqliteChannelRepo(db_path) as channel_repo:
+        channel_repo.set_channel_id("mofa", "C_SQLITE")
+    with SqliteSourceStateRepo(db_path) as source_repo:
+        source_repo.ensure_source(make_source("mofa", channel_id="C_CONFIG_CHANGED"))
 
-        assert repo.get_channel_id("mofa") == "C_SQLITE"
+    with SqliteChannelRepo(db_path) as channel_repo:
+        assert channel_repo.get_channel_id("mofa") == "C_SQLITE"
 
     with sqlite3.connect(db_path) as conn:
         table_names = {
@@ -80,6 +89,23 @@ def test_sqlite_state_repo_creates_schema_and_preserves_sqlite_channel_id(tmp_pa
         }
 
     assert {"sources", "seen_items", "audit_log"}.issubset(table_names)
+
+
+def test_sqlite_adapters_declare_narrow_output_ports(tmp_path: Path) -> None:
+    db_path = tmp_path / "feed.db"
+
+    with (
+        SqliteStateRepo(db_path) as seen_state_adapter,
+        SqliteSourceStateRepo(db_path) as source_state_adapter,
+        SqliteChannelRepo(db_path) as channel_resolver_adapter,
+    ):
+        seen_state: SeenStatePort = seen_state_adapter
+        source_state: SourceStatePort = source_state_adapter
+        channel_resolver: ChannelResolverPort = channel_resolver_adapter
+
+        seen_state.mark_seen("mofa", ["one"])
+        source_state.record_attempt("mofa")
+        assert channel_resolver.get_channel_id("mofa") is None
 
 
 def test_seen_items_are_isolated_by_source(tmp_path: Path) -> None:
@@ -119,7 +145,7 @@ def test_content_hash_fallback_is_stable_for_items_without_source_key() -> None:
 def test_attempt_success_and_failure_timestamps_are_separate(tmp_path: Path) -> None:
     db_path = tmp_path / "feed.db"
 
-    with SqliteStateRepo(db_path) as repo:
+    with SqliteSourceStateRepo(db_path) as repo:
         repo.record_attempt("lawreq")
         repo.record_failure("lawreq", "NETWORK")
 
