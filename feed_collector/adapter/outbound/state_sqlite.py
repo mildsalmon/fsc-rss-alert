@@ -9,6 +9,8 @@ from pathlib import Path
 from types import TracebackType
 from typing import IO, Sequence
 
+from feed_collector.application.port.output.channel import ChannelResolverPort
+from feed_collector.application.port.output.seen_state import SeenStatePort
 from feed_collector.domain import Item, SourceConfig
 
 
@@ -20,7 +22,7 @@ def _utc_now_text() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-class SqliteStateRepo:
+class SqliteStateRepo(SeenStatePort, ChannelResolverPort):
     def __init__(
         self,
         db_path: str | Path = DEFAULT_DB_PATH,
