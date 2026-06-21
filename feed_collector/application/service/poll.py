@@ -66,7 +66,7 @@ class PollService(PollInputPort):
         sent_items = []
         for item in new_items:
             delivery_id = self.notifier.send(channel_id, item)
-            self.audit.log(self.source.id, item, channel_id=channel_id, delivery_id=delivery_id)
+            self.audit.log_sent_delivery(self.source.id, item, channel_id=channel_id, delivery_id=delivery_id)
             sent_items.append(item)
 
         self.seen_state.mark_seen(self.source.id, [item.item_id for item in sent_items])

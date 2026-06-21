@@ -65,16 +65,15 @@ class FakeNotifier:
 class FakeAudit:
     logged: list[tuple[str, Item, str | None, str | None, str]] = field(default_factory=list)
 
-    def log(
+    def log_sent_delivery(
         self,
         source_id: str,
         item: Item,
         *,
-        channel_id: str | None = None,
+        channel_id: str,
         delivery_id: str | None = None,
-        status: str = "sent",
     ) -> None:
-        self.logged.append((source_id, item, channel_id, delivery_id, status))
+        self.logged.append((source_id, item, channel_id, delivery_id, "sent"))
 
 
 def make_source(channel_id: str | None = "C123") -> SourceConfig:

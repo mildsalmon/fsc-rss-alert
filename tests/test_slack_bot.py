@@ -14,6 +14,7 @@ from feed_collector.adapter.outbound import (
     feed_channel_name,
     format_slack_item_message,
 )
+from feed_collector.application.port.output import ChannelProvisionerPort
 from feed_collector.domain import Item
 
 
@@ -67,10 +68,28 @@ def make_item() -> Item:
     )
 
 
+def make_markup_item() -> Item:
+    return Item(
+        item_id="item-2",
+        title=" <@channel> & <policy> ",
+        link="https://example.test/policy?a=1&b=<x>",
+        published=None,
+    )
+
+
 def test_format_slack_item_message_preserves_title_date_link() -> None:
     assert (
         format_slack_item_message(make_item())
         == "Policy update\nDate: 2026-01-02T03:04:05+00:00\nLink: https://example.test/policy"
+    )
+
+
+def test_format_slack_item_message_escapes_slack_control_chars() -> None:
+    assert (
+        format_slack_item_message(make_markup_item())
+        == "&lt;@channel&gt; &amp; &lt;policy&gt;\n"
+        "Date: unknown\n"
+        "Link: https://example.test/policy?a=1&amp;b=&lt;x&gt;"
     )
 
 
@@ -90,7 +109,16 @@ def test_slack_bot_notifier_posts_chat_message() -> None:
         "channel": "C123",
         "text": "Policy update\nDate: 2026-01-02T03:04:05+00:00\nLink: https://example.test/policy",
         "unfurl_links": False,
+        "mrkdwn": False,
     }
+
+
+def test_slack_bot_notifier_rejects_malformed_success_without_ts() -> None:
+    session = FakeSlackSession([FakeResponse({"ok": True})])
+    notifier = SlackBotNotifier(bot_token="xoxb-test", session=session)
+
+    with pytest.raises(SlackApiError, match="returned no message ts"):
+        notifier.send("C123", make_item())
 
 
 def test_slack_bot_notifier_raises_for_slack_error() -> None:
@@ -115,8 +143,9 @@ def test_slack_channel_manager_reuses_existing_channel_on_name_taken() -> None:
         ],
     )
     manager = SlackChannelManager(bot_token="xoxb-test", session=session)
+    port: ChannelProvisionerPort = manager
 
-    channel_id = manager.ensure_feed_channel("feed ops")
+    channel_id = port.ensure_feed_channel("feed ops")
 
     assert channel_id == "CFEED"
     assert session.posts[0]["url"] == "https://slack.com/api/conversations.create"
@@ -135,3 +164,13 @@ def test_slack_channel_manager_creates_feed_channel() -> None:
 def test_feed_channel_name_is_deterministic() -> None:
     assert feed_channel_name("Feed Ops!") == "feed-feed-ops"
     assert feed_channel_name("  ") == "feed-source"
+
+
+def test_feed_channel_name_adds_hash_suffix_when_truncated() -> None:
+    first = feed_channel_name("a" * 100)
+    second = feed_channel_name("a" * 99 + "b")
+
+    assert len(first) == 80
+    assert len(second) == 80
+    assert first != second
+    assert first.startswith("feed-")

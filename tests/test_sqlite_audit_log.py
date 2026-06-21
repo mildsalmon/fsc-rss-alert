@@ -23,6 +23,18 @@ def audit_rows(db_path: Path) -> list[sqlite3.Row]:
         return list(conn.execute("SELECT * FROM audit_log ORDER BY id"))
 
 
+def insert_audit_row(db_path: Path, item_id: str, sent_at: str) -> None:
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("INSERT OR IGNORE INTO sources (id) VALUES (?)", ("mofa",))
+        conn.execute(
+            """
+            INSERT INTO audit_log (source_id, item_id, title, sent_at, status)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("mofa", item_id, f"title {item_id}", sent_at, "sent"),
+        )
+
+
 def test_sqlite_audit_log_inserts_delivery_fields(tmp_path: Path) -> None:
     db_path = tmp_path / "feed.db"
     sent_at = datetime(2026, 1, 2, tzinfo=timezone.utc).isoformat()
@@ -61,6 +73,19 @@ def test_sqlite_audit_log_existing_port_log_remains_supported(tmp_path: Path) ->
     assert rows[0]["slack_ts"] == "123.456"
 
 
+def test_sqlite_audit_log_sent_delivery_port_logs_sent_status(tmp_path: Path) -> None:
+    db_path = tmp_path / "feed.db"
+
+    with SqliteAuditLog(db_path) as audit:
+        audit.log_sent_delivery("mofa", make_item(), channel_id="C123", delivery_id="123.456")
+
+    rows = audit_rows(db_path)
+    assert len(rows) == 1
+    assert rows[0]["status"] == "sent"
+    assert rows[0]["channel_id"] == "C123"
+    assert rows[0]["slack_ts"] == "123.456"
+
+
 def test_sqlite_audit_log_prunes_rows_older_than_retention(tmp_path: Path) -> None:
     db_path = tmp_path / "feed.db"
     now = datetime(2026, 6, 21, tzinfo=timezone.utc)
@@ -70,6 +95,24 @@ def test_sqlite_audit_log_prunes_rows_older_than_retention(tmp_path: Path) -> No
     with SqliteAuditLog(db_path, retention_days=90) as audit:
         audit.log_delivery("mofa", make_item("old"), sent_at=old_sent_at)
         audit.log_delivery("mofa", make_item("fresh"), sent_at=fresh_sent_at)
+        audit.prune(now=now)
+
+    rows = audit_rows(db_path)
+    assert [row["item_id"] for row in rows] == ["fresh"]
+
+
+def test_sqlite_audit_log_prune_commits_when_called_directly(tmp_path: Path) -> None:
+    db_path = tmp_path / "feed.db"
+    now = datetime(2026, 6, 21, tzinfo=timezone.utc)
+    old_sent_at = (now - timedelta(days=91)).isoformat()
+    fresh_sent_at = (now - timedelta(days=89)).isoformat()
+
+    with SqliteAuditLog(db_path, retention_days=90):
+        pass
+    insert_audit_row(db_path, "old", old_sent_at)
+    insert_audit_row(db_path, "fresh", fresh_sent_at)
+
+    with SqliteAuditLog(db_path, retention_days=90) as audit:
         audit.prune(now=now)
 
     rows = audit_rows(db_path)

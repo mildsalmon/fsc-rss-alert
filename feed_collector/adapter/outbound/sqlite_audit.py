@@ -30,6 +30,22 @@ class SqliteAuditLog(SqliteRepoBase, AuditPort):
             status=status,
         )
 
+    def log_sent_delivery(
+        self,
+        source_id: str,
+        item: Item,
+        *,
+        channel_id: str,
+        delivery_id: str | None = None,
+    ) -> None:
+        self.log_delivery(
+            source_id,
+            item,
+            channel_id=channel_id,
+            slack_ts=delivery_id,
+            status="sent",
+        )
+
     def log_delivery(
         self,
         source_id: str,
@@ -64,7 +80,8 @@ class SqliteAuditLog(SqliteRepoBase, AuditPort):
     def prune(self, *, now: datetime | None = None) -> None:
         cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=self.retention_days)
         cutoff_text = cutoff.isoformat()
-        self._conn.execute(
-            "DELETE FROM audit_log WHERE sent_at < ?",
-            (cutoff_text,),
-        )
+        with self._conn:
+            self._conn.execute(
+                "DELETE FROM audit_log WHERE sent_at < ?",
+                (cutoff_text,),
+            )
