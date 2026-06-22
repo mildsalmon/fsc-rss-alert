@@ -9,10 +9,10 @@ from feed_collector.adapter.outbound.datatables import (
     DEFAULT_LENGTH,
     DataTablesAdapter,
     DataTablesAdapterError,
-    assert_newest_first,
-    build_request,
-    map_row,
-    rows_at_path,
+    DataTablesOrderingValidator,
+    DataTablesRequestBuilder,
+    DataTablesRowMapper,
+    DataTablesRowsExtractor,
 )
 from feed_collector.domain import EmptyResultPolicy, ParamValue, SourceConfig
 
@@ -57,7 +57,7 @@ def test_build_request_includes_datatables_defaults_and_config_params() -> None:
         }
     )
 
-    request = build_request(cfg)
+    request = DataTablesRequestBuilder().build(cfg)
 
     assert request == {
         "draw": 1,
@@ -70,11 +70,11 @@ def test_build_request_includes_datatables_defaults_and_config_params() -> None:
 
 
 def test_build_request_uses_default_length() -> None:
-    assert build_request(make_source())["length"] == DEFAULT_LENGTH
+    assert DataTablesRequestBuilder().build(make_source())["length"] == DEFAULT_LENGTH
 
 
 def test_map_row_to_item_link_and_kst_published() -> None:
-    item = map_row(
+    item = DataTablesRowMapper().map(
         {"lawreqIdx": 123, "title": "Capital market act", "regDt": "2026-06-21 09:30:00"},
         make_source(),
     )
@@ -100,7 +100,7 @@ def test_map_row_uses_configured_field_names() -> None:
         detail_url="https://example.test/detail/{id}",
     )
 
-    item = map_row({"idx": "abc", "subject": "Custom row", "createdAt": "2026-06-21 09:30:00"}, cfg)
+    item = DataTablesRowMapper().map({"idx": "abc", "subject": "Custom row", "createdAt": "2026-06-21 09:30:00"}, cfg)
 
     assert item.item_id == "abc"
     assert item.title == "Custom row"
@@ -112,7 +112,7 @@ def test_map_row_uses_configured_field_names() -> None:
 
 
 def test_map_row_converts_aware_reg_dt_to_kst() -> None:
-    item = map_row(
+    item = DataTablesRowMapper().map(
         {"lawreqIdx": "abc", "title": "Notice", "regDt": "2026-06-21T00:30:00Z"},
         make_source(),
     )
@@ -135,33 +135,33 @@ def test_map_row_converts_aware_reg_dt_to_kst() -> None:
 )
 def test_map_row_missing_or_invalid_required_fields_fail(row: dict[str, object], match: str) -> None:
     with pytest.raises(DataTablesAdapterError, match=match):
-        map_row(row, make_source())
+        DataTablesRowMapper().map(row, make_source())
 
 
 def test_map_row_requires_configured_field_mapping() -> None:
     cfg = make_source(params={"item_id_field": None})
 
     with pytest.raises(DataTablesAdapterError, match="requires params.item_id_field"):
-        map_row({"lawreqIdx": 1, "title": "Title", "regDt": "2026-06-21"}, cfg)
+        DataTablesRowMapper().map({"lawreqIdx": 1, "title": "Title", "regDt": "2026-06-21"}, cfg)
 
 
 def test_map_row_rejects_unknown_timezone() -> None:
     cfg = make_source(params={"published_timezone": "Not/AZone"})
 
     with pytest.raises(DataTablesAdapterError, match="unknown timezone"):
-        map_row({"lawreqIdx": 1, "title": "Title", "regDt": "2026-06-21"}, cfg)
+        DataTablesRowMapper().map({"lawreqIdx": 1, "title": "Title", "regDt": "2026-06-21"}, cfg)
 
 
 def test_rows_at_path_rejects_structure_change() -> None:
     with pytest.raises(DataTablesAdapterError, match="list_path"):
-        rows_at_path({"payload": []}, make_source(list_path="data"))
+        DataTablesRowsExtractor().extract({"payload": []}, make_source(list_path="data"))
 
     with pytest.raises(DataTablesAdapterError, match="does not resolve to a list"):
-        rows_at_path({"data": {"nested": []}}, make_source(list_path="data"))
+        DataTablesRowsExtractor().extract({"data": {"nested": []}}, make_source(list_path="data"))
 
 
 def test_newest_first_assertion_accepts_descending_rows() -> None:
-    assert_newest_first(
+    DataTablesOrderingValidator().validate_newest_first(
         [
             {"lawreqIdx": 2, "title": "Newer", "regDt": "2026-06-21"},
             {"lawreqIdx": 1, "title": "Older", "regDt": "2026-06-20"},
@@ -172,7 +172,7 @@ def test_newest_first_assertion_accepts_descending_rows() -> None:
 
 def test_newest_first_assertion_rejects_ascending_rows() -> None:
     with pytest.raises(DataTablesAdapterError, match="newest-first"):
-        assert_newest_first(
+        DataTablesOrderingValidator().validate_newest_first(
             [
                 {"lawreqIdx": 1, "title": "Older", "regDt": "2026-06-20"},
                 {"lawreqIdx": 2, "title": "Newer", "regDt": "2026-06-21"},
