@@ -5,7 +5,13 @@ from typing import Any, cast
 
 import pytest
 
-from feed_collector.adapter.outbound import HttpFetcherFactory, MofaCookieGateFetcher, RssAdapter, RssAdapterFactory
+from feed_collector.adapter.outbound import (
+    HttpClient,
+    HttpFetcherFactory,
+    MofaCookieGateFetcher,
+    RssAdapter,
+    RssAdapterFactory,
+)
 from feed_collector.adapter.outbound.http_fetch import HttpFetchOptions
 from feed_collector.adapter.outbound.rss import parse_items
 from feed_collector.domain import ParamValue, SourceConfig
@@ -144,14 +150,16 @@ def test_mofa_cookie_gate_fetcher_uses_two_hit_flow_with_bounded_redirects() -> 
         ]
     )
     fetcher = MofaCookieGateFetcher(
-        options=HttpFetchOptions(
-            timeout_seconds=7,
-            retries=1,
-            retry_delay_seconds=0,
-            max_redirects=2,
-            user_agent="test-agent",
+        client=HttpClient(
+            options=HttpFetchOptions(
+                timeout_seconds=7,
+                retries=1,
+                retry_delay_seconds=0,
+                max_redirects=2,
+                user_agent="test-agent",
+            ),
+            session=session,
         ),
-        session=session,
     )
 
     payload = fetcher.fetch("https://www.mofa.go.kr/rss.xml")

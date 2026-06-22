@@ -45,64 +45,89 @@ class HttpFetchOptions:
 
 
 @dataclass
-class DefaultHttpFetcher(ByteFetcher):
+class HttpClient:
     options: HttpFetchOptions
     session: Any = field(default_factory=requests.Session)
+    sleep_fn: Callable[[float], None] = sleep
+
+    def get(self, url: str, *, allow_redirects: bool) -> requests.Response:
+        original_max_redirects = getattr(self.session, "max_redirects", None)
+        if hasattr(self.session, "max_redirects"):
+            self.session.max_redirects = self.options.max_redirects
+        try:
+            return self.session.get(
+                url,
+                headers={"User-Agent": self.options.user_agent},
+                timeout=self.options.timeout_seconds,
+                allow_redirects=allow_redirects,
+            )
+        except requests.Timeout as exc:
+            raise PollError("Feed fetch timed out") from exc
+        except requests.TooManyRedirects as exc:
+            raise PollError(f"Feed fetch exceeded {self.options.max_redirects} redirects") from exc
+        except requests.RequestException as exc:
+            raise PollError(f"Feed fetch failed: {exc}") from exc
+        finally:
+            if original_max_redirects is not None:
+                self.session.max_redirects = original_max_redirects
+
+    def ensure_success(self, response: requests.Response) -> None:
+        status_code = int(response.status_code)
+        if 200 <= status_code < 300:
+            return
+        raise PollError(f"Feed fetch returned HTTP {status_code}")
+
+    def is_redirect(self, response: requests.Response) -> bool:
+        return 300 <= int(response.status_code) < 400
+
+    def fetch_with_retries(self, fetch_once: Callable[[], bytes]) -> bytes:
+        last_error: PollError | None = None
+        for attempt in range(1, self.options.retries + 1):
+            try:
+                return fetch_once()
+            except PollError as exc:
+                last_error = exc
+                if attempt == self.options.retries:
+                    break
+                if self.options.retry_delay_seconds:
+                    self.sleep_fn(self.options.retry_delay_seconds)
+        raise PollError(f"Feed fetch failed after {self.options.retries} attempts: {last_error}")
+
+
+@dataclass
+class DefaultHttpFetcher(ByteFetcher):
+    client: HttpClient
 
     def fetch(self, url: str) -> bytes:
-        return _with_retries(
-            lambda: self._fetch_once(url),
-            retries=self.options.retries,
-            retry_delay_seconds=self.options.retry_delay_seconds,
-        )
+        return self.client.fetch_with_retries(lambda: self._fetch_once(url))
 
     def _fetch_once(self, url: str) -> bytes:
-        response = _get(
-            self.session,
-            url,
-            options=self.options,
-            allow_redirects=True,
-        )
-        _ensure_success(response)
+        response = self.client.get(url, allow_redirects=True)
+        self.client.ensure_success(response)
         return bytes(response.content)
 
 
 @dataclass
 class MofaCookieGateFetcher(ByteFetcher):
-    options: HttpFetchOptions
+    client: HttpClient
     cookie_name: str = MOFA_COOKIE_NAME
-    session: Any = field(default_factory=requests.Session)
 
     def fetch(self, url: str) -> bytes:
-        return _with_retries(
-            lambda: self._fetch_once(url),
-            retries=self.options.retries,
-            retry_delay_seconds=self.options.retry_delay_seconds,
-        )
+        return self.client.fetch_with_retries(lambda: self._fetch_once(url))
 
     def _fetch_once(self, url: str) -> bytes:
-        seed_response = _get(
-            self.session,
-            url,
-            options=self.options,
-            allow_redirects=False,
-        )
+        seed_response = self.client.get(url, allow_redirects=False)
         if 200 <= int(seed_response.status_code) < 300:
             return bytes(seed_response.content)
-        if not _is_redirect(seed_response.status_code):
-            _ensure_success(seed_response)
+        if not self.client.is_redirect(seed_response):
+            self.client.ensure_success(seed_response)
 
         set_cookie = seed_response.headers.get("Set-Cookie", "")
         if self.cookie_name.lower() not in set_cookie.lower():
             raise PollError(f"MOFA cookie gate did not set {self.cookie_name}")
 
-        response = _get(
-            self.session,
-            url,
-            options=self.options,
-            allow_redirects=True,
-        )
-        _ensure_success(response)
+        response = self.client.get(url, allow_redirects=True)
+        self.client.ensure_success(response)
         return bytes(response.content)
 
 
@@ -117,11 +142,12 @@ class HttpFetcherFactory(ByteFetcherFactory):
 
     def create(self, source: SourceConfig) -> ByteFetcher:
         options = self.options_from_source(source)
+        client = HttpClient(options=options, session=self.session_factory())
         profile = str(source.params.get("fetch_profile") or DEFAULT_FETCH_PROFILE)
         if profile == DEFAULT_FETCH_PROFILE:
-            return DefaultHttpFetcher(options=options, session=self.session_factory())
+            return DefaultHttpFetcher(client=client)
         if profile == MOFA_FETCH_PROFILE:
-            return MofaCookieGateFetcher(options=options, session=self.session_factory())
+            return MofaCookieGateFetcher(client=client)
         raise PollError(
             f"Source {source.id} has unsupported fetch_profile {profile!r}; "
             f"expected one of: {DEFAULT_FETCH_PROFILE}, {MOFA_FETCH_PROFILE}"
@@ -173,63 +199,11 @@ def _non_negative_float(source: SourceConfig, key: str, explicit: float | None, 
     return value
 
 
-def _with_retries(fetch_once: Any, *, retries: int, retry_delay_seconds: float) -> bytes:
-    last_error: PollError | None = None
-    for attempt in range(1, retries + 1):
-        try:
-            return fetch_once()
-        except PollError as exc:
-            last_error = exc
-            if attempt == retries:
-                break
-            if retry_delay_seconds:
-                sleep(retry_delay_seconds)
-    raise PollError(f"Feed fetch failed after {retries} attempts: {last_error}")
-
-
-def _get(
-    session: Any,
-    url: str,
-    *,
-    options: HttpFetchOptions,
-    allow_redirects: bool,
-) -> requests.Response:
-    original_max_redirects = getattr(session, "max_redirects", None)
-    if hasattr(session, "max_redirects"):
-        session.max_redirects = options.max_redirects
-    try:
-        return session.get(
-            url,
-            headers={"User-Agent": options.user_agent},
-            timeout=options.timeout_seconds,
-            allow_redirects=allow_redirects,
-        )
-    except requests.Timeout as exc:
-        raise PollError("Feed fetch timed out") from exc
-    except requests.TooManyRedirects as exc:
-        raise PollError(f"Feed fetch exceeded {options.max_redirects} redirects") from exc
-    except requests.RequestException as exc:
-        raise PollError(f"Feed fetch failed: {exc}") from exc
-    finally:
-        if original_max_redirects is not None:
-            session.max_redirects = original_max_redirects
-
-
-def _ensure_success(response: requests.Response) -> None:
-    status_code = int(response.status_code)
-    if 200 <= status_code < 300:
-        return
-    raise PollError(f"Feed fetch returned HTTP {status_code}")
-
-
-def _is_redirect(status_code: int) -> bool:
-    return 300 <= int(status_code) < 400
-
-
 __all__ = [
     "ByteFetcher",
     "ByteFetcherFactory",
     "DefaultHttpFetcher",
+    "HttpClient",
     "HttpFetcherFactory",
     "HttpFetchOptions",
     "MofaCookieGateFetcher",
