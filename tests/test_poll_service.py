@@ -140,7 +140,7 @@ def test_poll_sends_new_items_oldest_first_and_marks_seen_after_audit() -> None:
     assert result.new_items == (older, newer)
     assert [item.item_id for _, item in notifier.sent] == ["older", "newer"]
     assert [item.item_id for _, item, _, _, _ in audit.logged] == ["older", "newer"]
-    assert state.marked_batches == [["older", "newer"]]
+    assert state.marked_batches == [["older"], ["newer"]]
 
 
 def test_poll_passes_delivery_metadata_to_audit() -> None:
@@ -154,7 +154,7 @@ def test_poll_passes_delivery_metadata_to_audit() -> None:
     assert audit.logged == [("mofa", item, "C123", "123.456", "sent")]
 
 
-def test_poll_send_failure_does_not_advance_any_seen_state() -> None:
+def test_poll_send_failure_keeps_successful_delivery_seen() -> None:
     first = make_item("first", datetime(2026, 1, 1, tzinfo=timezone.utc))
     second = make_item("fails", datetime(2026, 1, 2, tzinfo=timezone.utc))
     state = FakeState(first_run=False)
@@ -166,8 +166,8 @@ def test_poll_send_failure_does_not_advance_any_seen_state() -> None:
 
     assert [item.item_id for _, item in notifier.sent] == ["first"]
     assert [item.item_id for _, item, _, _, _ in audit.logged] == ["first"]
-    assert state.marked_batches == []
-    assert "first" not in state.seen
+    assert state.marked_batches == [["first"]]
+    assert "first" in state.seen
     assert "fails" not in state.seen
 
 

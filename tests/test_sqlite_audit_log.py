@@ -88,7 +88,7 @@ def test_sqlite_audit_log_sent_delivery_port_logs_sent_status(tmp_path: Path) ->
 
 def test_sqlite_audit_log_prunes_rows_older_than_retention(tmp_path: Path) -> None:
     db_path = tmp_path / "feed.db"
-    now = datetime(2026, 6, 21, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     old_sent_at = (now - timedelta(days=91)).isoformat()
     fresh_sent_at = (now - timedelta(days=89)).isoformat()
 

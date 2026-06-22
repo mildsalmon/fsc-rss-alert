@@ -21,6 +21,8 @@ from feed_collector.domain import Item
 @dataclass
 class FakeResponse:
     data: dict[str, Any]
+    status_code: int = 200
+    headers: Mapping[str, str] = field(default_factory=dict)
 
     def json(self) -> dict[str, Any]:
         return self.data
@@ -129,6 +131,19 @@ def test_slack_bot_notifier_raises_for_slack_error() -> None:
         notifier.send("C404", make_item())
 
 
+def test_slack_bot_notifier_retries_http_429_once() -> None:
+    session = FakeSlackSession(
+        [
+            FakeResponse({"ok": False, "error": "rate_limited"}, status_code=429, headers={"Retry-After": "0"}),
+            FakeResponse({"ok": True, "ts": "123.456"}),
+        ]
+    )
+    notifier = SlackBotNotifier(bot_token="xoxb-test", session=session)
+
+    assert notifier.send("C123", make_item()) == "123.456"
+    assert len(session.posts) == 2
+
+
 def test_slack_channel_manager_reuses_existing_channel_on_name_taken() -> None:
     session = FakeSlackSession(
         post_responses=[FakeResponse({"ok": False, "error": "name_taken"})],
@@ -136,7 +151,7 @@ def test_slack_channel_manager_reuses_existing_channel_on_name_taken() -> None:
             FakeResponse(
                 {
                     "ok": True,
-                    "channels": [{"id": "CFEED", "name": "feed-feed-ops"}],
+                    "channels": [{"id": "CFEED", "name": "feed-feed-ops", "is_member": True}],
                     "response_metadata": {"next_cursor": ""},
                 }
             )
@@ -151,6 +166,50 @@ def test_slack_channel_manager_reuses_existing_channel_on_name_taken() -> None:
     assert session.posts[0]["url"] == "https://slack.com/api/conversations.create"
     assert session.posts[0]["json"] == {"name": "feed-feed-ops"}
     assert session.gets[0]["url"] == "https://slack.com/api/conversations.list"
+
+
+def test_slack_channel_manager_joins_existing_public_channel_on_name_taken() -> None:
+    session = FakeSlackSession(
+        post_responses=[
+            FakeResponse({"ok": False, "error": "name_taken"}),
+            FakeResponse({"ok": True, "channel": {"id": "CFEED"}}),
+        ],
+        get_responses=[
+            FakeResponse(
+                {
+                    "ok": True,
+                    "channels": [{"id": "CFEED", "name": "feed-feed-ops", "is_member": False}],
+                    "response_metadata": {"next_cursor": ""},
+                }
+            )
+        ],
+    )
+    manager = SlackChannelManager(bot_token="xoxb-test", session=session)
+
+    assert manager.ensure_feed_channel("feed ops") == "CFEED"
+    assert session.posts[1]["url"] == "https://slack.com/api/conversations.join"
+    assert session.posts[1]["json"] == {"channel": "CFEED"}
+
+
+def test_slack_channel_manager_rejects_existing_private_channel_when_not_member() -> None:
+    session = FakeSlackSession(
+        post_responses=[FakeResponse({"ok": False, "error": "name_taken"})],
+        get_responses=[
+            FakeResponse(
+                {
+                    "ok": True,
+                    "channels": [
+                        {"id": "GFEED", "name": "feed-feed-ops", "is_member": False, "is_private": True}
+                    ],
+                    "response_metadata": {"next_cursor": ""},
+                }
+            )
+        ],
+    )
+    manager = SlackChannelManager(bot_token="xoxb-test", session=session)
+
+    with pytest.raises(SlackApiError, match="not a member"):
+        manager.ensure_feed_channel("feed ops")
 
 
 def test_slack_channel_manager_creates_feed_channel() -> None:
