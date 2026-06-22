@@ -5,7 +5,7 @@ from typing import Any, cast
 
 import pytest
 
-from feed_collector.adapter.outbound import MofaCookieGateFetcher, RssAdapter
+from feed_collector.adapter.outbound import HttpFetcherFactory, MofaCookieGateFetcher, RssAdapter, RssAdapterFactory
 from feed_collector.adapter.outbound.http_fetch import HttpFetchOptions
 from feed_collector.adapter.outbound.rss import parse_items
 from feed_collector.domain import ParamValue, SourceConfig
@@ -163,7 +163,7 @@ def test_mofa_cookie_gate_fetcher_uses_two_hit_flow_with_bounded_redirects() -> 
     assert session.max_redirects == 30
 
 
-def test_rss_adapter_selects_mofa_fetch_profile_from_config() -> None:
+def test_rss_adapter_factory_selects_mofa_fetch_profile_from_config() -> None:
     session = FakeSession(
         [
             FakeResponse(307, headers={"Set-Cookie": "TMOSHCooKie=abc; Path=/"}),
@@ -171,8 +171,14 @@ def test_rss_adapter_selects_mofa_fetch_profile_from_config() -> None:
         ]
     )
     source = make_source(params={"fetch_profile": "mofa_cookie_gate", "fetch_retry_delay_seconds": 0})
+    adapter_factory = RssAdapterFactory(
+        HttpFetcherFactory(
+            session_factory=lambda: session,
+            retries=1,
+        )
+    )
 
-    items = RssAdapter(source, session=cast(Any, session), retries=1).fetch()
+    items = adapter_factory.create(source).fetch()
 
     assert [item.item_id for item in items] == ["guid-1"]
     assert [call["allow_redirects"] for call in session.calls] == [False, True]
@@ -180,7 +186,12 @@ def test_rss_adapter_selects_mofa_fetch_profile_from_config() -> None:
 
 def test_rss_adapter_retries_fetch_failures_with_clear_source_context() -> None:
     session = FakeSession([FakeResponse(503), FakeResponse(503)])
-    adapter = RssAdapter(make_source(), session=cast(Any, session), retries=2, retry_delay_seconds=0)
+    fetcher = HttpFetcherFactory(
+        session_factory=lambda: session,
+        retries=2,
+        retry_delay_seconds=0,
+    ).create(make_source())
+    adapter = RssAdapter(make_source(), fetcher=fetcher)
 
     with pytest.raises(PollError, match="RSS fetch failed for mofa: .*after 2 attempts"):
         adapter.fetch()
@@ -203,7 +214,7 @@ def test_rss_adapter_retries_fetch_failures_with_clear_source_context() -> None:
 )
 def test_rss_adapter_validates_fetch_params(params: dict[str, ParamValue], match: str) -> None:
     with pytest.raises(PollError, match=match):
-        RssAdapter(make_source(params=params))
+        HttpFetcherFactory().create(make_source(params=params))
 
 
 def test_rss_adapter_empty_result_policy_controls_empty_feeds() -> None:

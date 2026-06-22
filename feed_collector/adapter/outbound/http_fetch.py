@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from time import sleep
 from typing import Any, Protocol
@@ -28,6 +29,10 @@ MOFA_COOKIE_NAME = "TMOSHCooKie"
 
 class ByteFetcher(Protocol):
     def fetch(self, url: str) -> bytes: ...
+
+
+class ByteFetcherFactory(Protocol):
+    def create(self, source: SourceConfig) -> ByteFetcher: ...
 
 
 @dataclass(frozen=True)
@@ -101,61 +106,45 @@ class MofaCookieGateFetcher(ByteFetcher):
         return bytes(response.content)
 
 
-def http_fetcher_from_source(
-    source: SourceConfig,
-    *,
-    session: Any | None = None,
-    timeout_seconds: int | None = None,
-    retries: int | None = None,
-    retry_delay_seconds: float | None = None,
-    max_redirects: int | None = None,
-    user_agent: str | None = None,
-) -> ByteFetcher:
-    options = http_fetch_options_from_source(
-        source,
-        timeout_seconds=timeout_seconds,
-        retries=retries,
-        retry_delay_seconds=retry_delay_seconds,
-        max_redirects=max_redirects,
-        user_agent=user_agent,
-    )
-    profile = str(source.params.get("fetch_profile") or DEFAULT_FETCH_PROFILE)
-    if profile == DEFAULT_FETCH_PROFILE:
-        return DefaultHttpFetcher(options=options, session=session or requests.Session())
-    if profile == MOFA_FETCH_PROFILE:
-        return MofaCookieGateFetcher(options=options, session=session or requests.Session())
-    raise PollError(
-        f"Source {source.id} has unsupported fetch_profile {profile!r}; "
-        f"expected one of: {DEFAULT_FETCH_PROFILE}, {MOFA_FETCH_PROFILE}"
-    )
+@dataclass(frozen=True)
+class HttpFetcherFactory(ByteFetcherFactory):
+    session_factory: Callable[[], Any] = requests.Session
+    timeout_seconds: int | None = None
+    retries: int | None = None
+    retry_delay_seconds: float | None = None
+    max_redirects: int | None = None
+    user_agent: str | None = None
 
+    def create(self, source: SourceConfig) -> ByteFetcher:
+        options = self.options_from_source(source)
+        profile = str(source.params.get("fetch_profile") or DEFAULT_FETCH_PROFILE)
+        if profile == DEFAULT_FETCH_PROFILE:
+            return DefaultHttpFetcher(options=options, session=self.session_factory())
+        if profile == MOFA_FETCH_PROFILE:
+            return MofaCookieGateFetcher(options=options, session=self.session_factory())
+        raise PollError(
+            f"Source {source.id} has unsupported fetch_profile {profile!r}; "
+            f"expected one of: {DEFAULT_FETCH_PROFILE}, {MOFA_FETCH_PROFILE}"
+        )
 
-def http_fetch_options_from_source(
-    source: SourceConfig,
-    *,
-    timeout_seconds: int | None = None,
-    retries: int | None = None,
-    retry_delay_seconds: float | None = None,
-    max_redirects: int | None = None,
-    user_agent: str | None = None,
-) -> HttpFetchOptions:
-    return HttpFetchOptions(
-        timeout_seconds=_positive_int(
-            source,
-            "timeout_seconds",
-            timeout_seconds,
-            DEFAULT_TIMEOUT_SECONDS,
-        ),
-        retries=_positive_int(source, "fetch_retries", retries, DEFAULT_FETCH_RETRIES),
-        retry_delay_seconds=_non_negative_float(
-            source,
-            "fetch_retry_delay_seconds",
-            retry_delay_seconds,
-            DEFAULT_FETCH_RETRY_DELAY_SECONDS,
-        ),
-        max_redirects=_positive_int(source, "max_redirects", max_redirects, DEFAULT_MAX_REDIRECTS),
-        user_agent=user_agent or str(source.params.get("user_agent") or DEFAULT_RSS_USER_AGENT),
-    )
+    def options_from_source(self, source: SourceConfig) -> HttpFetchOptions:
+        return HttpFetchOptions(
+            timeout_seconds=_positive_int(
+                source,
+                "timeout_seconds",
+                self.timeout_seconds,
+                DEFAULT_TIMEOUT_SECONDS,
+            ),
+            retries=_positive_int(source, "fetch_retries", self.retries, DEFAULT_FETCH_RETRIES),
+            retry_delay_seconds=_non_negative_float(
+                source,
+                "fetch_retry_delay_seconds",
+                self.retry_delay_seconds,
+                DEFAULT_FETCH_RETRY_DELAY_SECONDS,
+            ),
+            max_redirects=_positive_int(source, "max_redirects", self.max_redirects, DEFAULT_MAX_REDIRECTS),
+            user_agent=self.user_agent or str(source.params.get("user_agent") or DEFAULT_RSS_USER_AGENT),
+        )
 
 
 def _positive_int(source: SourceConfig, key: str, explicit: int | None, default: int) -> int:
@@ -239,9 +228,9 @@ def _is_redirect(status_code: int) -> bool:
 
 __all__ = [
     "ByteFetcher",
+    "ByteFetcherFactory",
     "DefaultHttpFetcher",
+    "HttpFetcherFactory",
     "HttpFetchOptions",
     "MofaCookieGateFetcher",
-    "http_fetch_options_from_source",
-    "http_fetcher_from_source",
 ]

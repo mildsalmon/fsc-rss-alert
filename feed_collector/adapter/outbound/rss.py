@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 import feedparser
 from dateutil import parser as date_parser
 
-from feed_collector.adapter.outbound.http_fetch import ByteFetcher, http_fetcher_from_source
+from feed_collector.adapter.outbound.http_fetch import ByteFetcher, ByteFetcherFactory
 from feed_collector.application.port.output.source import SourcePort
 from feed_collector.domain import Item, SourceConfig
 from feed_collector.errors import PollError
@@ -17,24 +18,10 @@ class RssAdapter(SourcePort):
         self,
         source: SourceConfig,
         *,
-        fetcher: ByteFetcher | None = None,
-        session: Any | None = None,
-        timeout_seconds: int | None = None,
-        retries: int | None = None,
-        retry_delay_seconds: float | None = None,
-        max_redirects: int | None = None,
-        user_agent: str | None = None,
+        fetcher: ByteFetcher,
     ) -> None:
         self.source = source
-        self.fetcher: ByteFetcher = fetcher or http_fetcher_from_source(
-            source,
-            session=session,
-            timeout_seconds=timeout_seconds,
-            retries=retries,
-            retry_delay_seconds=retry_delay_seconds,
-            max_redirects=max_redirects,
-            user_agent=user_agent,
-        )
+        self.fetcher = fetcher
 
     def fetch(self) -> list[Item]:
         try:
@@ -46,6 +33,17 @@ class RssAdapter(SourcePort):
             source_id=self.source.id,
             empty_result_policy=self.source.empty_result_policy,
         )
+
+
+@dataclass(frozen=True)
+class RssAdapterFactory:
+    fetcher_factory: ByteFetcherFactory
+
+    def create(self, source: SourceConfig) -> RssAdapter:
+        return RssAdapter(source, fetcher=self.fetcher_factory.create(source))
+
+    def __call__(self, source: SourceConfig) -> RssAdapter:
+        return self.create(source)
 
 
 def parse_items(
@@ -94,4 +92,4 @@ def _entry_text(entry: Any, key: str) -> str:
     return str(value).strip() if value is not None else ""
 
 
-__all__ = ["RssAdapter", "parse_items"]
+__all__ = ["RssAdapter", "RssAdapterFactory", "parse_items"]
