@@ -169,11 +169,14 @@ class SlackBotNotifier(NotifierPort):
         )
 
     def send(self, channel_id: str, item: Item) -> str:
+        return self.send_text(channel_id, format_slack_item_message(item))
+
+    def send_text(self, channel_id: str, text: str) -> str:
         data = self.api.post(
             "chat.postMessage",
             {
                 "channel": channel_id,
-                "text": format_slack_item_message(item),
+                "text": text,
                 "unfurl_links": False,
                 "mrkdwn": False,
             },
