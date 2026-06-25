@@ -109,7 +109,7 @@ def test_digest_cli_sends_one_feed_ops_message_and_prunes_old_audit(
 
     assert cli.run_digest(args) == 0
 
-    assert FakeSlackChannelManager.instances[0].requested == ["feed-ops"]
+    assert FakeSlackChannelManager.instances[0].requested == ["ops"]
     assert FakeSlackBotNotifier.instances[0].sent_texts[0][0] == "COPS"
     assert "Feed collector daily digest" in FakeSlackBotNotifier.instances[0].sent_texts[0][1]
     with sqlite3.connect(db_path) as conn:

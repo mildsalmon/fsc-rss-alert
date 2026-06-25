@@ -49,6 +49,8 @@ IMMEDIATE_FAILURE_REASONS = frozenset(
         FetchFailureReason.NOT_FOUND,
     }
 )
+OPS_CHANNEL_STATE_ID = "feed-ops"
+OPS_CHANNEL_SLUG = "ops"
 
 
 @dataclass(frozen=True)
@@ -188,13 +190,13 @@ class PollRunner:
             print(f"[{source.id}] failure alert could not be sent: {alert_error}", file=sys.stderr)
 
     def _ops_channel_id(self) -> str:
-        channel_id = self.channel_repo.get_channel_id("feed-ops")
+        channel_id = self.channel_repo.get_channel_id(OPS_CHANNEL_STATE_ID)
         if channel_id:
             return channel_id
         if self.channel_provisioner is None:
             raise PollError("feed-ops channel provisioner is not configured")
-        channel_id = self.channel_provisioner.ensure_feed_channel("feed-ops")
-        self.channel_repo.set_channel_id("feed-ops", channel_id)
+        channel_id = self.channel_provisioner.ensure_feed_channel(OPS_CHANNEL_SLUG)
+        self.channel_repo.set_channel_id(OPS_CHANNEL_STATE_ID, channel_id)
         return channel_id
 
     def _now(self) -> datetime:
@@ -512,11 +514,11 @@ def ensure_ops_channel_id(
     channel_repo: ChannelStateStore,
     channel_provisioner: ChannelProvisionerPort,
 ) -> str:
-    channel_id = channel_repo.get_channel_id("feed-ops")
+    channel_id = channel_repo.get_channel_id(OPS_CHANNEL_STATE_ID)
     if channel_id:
         return channel_id
-    channel_id = channel_provisioner.ensure_feed_channel("feed-ops")
-    channel_repo.set_channel_id("feed-ops", channel_id)
+    channel_id = channel_provisioner.ensure_feed_channel(OPS_CHANNEL_SLUG)
+    channel_repo.set_channel_id(OPS_CHANNEL_STATE_ID, channel_id)
     return channel_id
 
 
