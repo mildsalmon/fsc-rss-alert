@@ -52,10 +52,14 @@ class SqliteRepoBase:
                   last_attempt_at TEXT,
                   last_success_at TEXT,
                   consecutive_failures INTEGER NOT NULL DEFAULT 0,
-                  failure_alert_sent INTEGER NOT NULL DEFAULT 0
+                  failure_alert_sent INTEGER NOT NULL DEFAULT 0,
+                  last_failure_reason TEXT,
+                  last_failure_at TEXT
                 )
                 """
             )
+            self._ensure_column("sources", "last_failure_reason", "TEXT")
+            self._ensure_column("sources", "last_failure_at", "TEXT")
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS seen_items (
@@ -92,3 +96,9 @@ class SqliteRepoBase:
             "INSERT OR IGNORE INTO sources (id) VALUES (?)",
             (source_id,),
         )
+
+    def _ensure_column(self, table_name: str, column_name: str, column_type: str) -> None:
+        rows = self._conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        if any(row[1] == column_name for row in rows):
+            return
+        self._conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")

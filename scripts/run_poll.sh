@@ -17,4 +17,4 @@ if [ -f ".env" ]; then
   set +a
 fi
 
-uv run python main.py
+uv run python -m feed_collector poll

@@ -89,7 +89,7 @@ class PollService(PollInputPort):
         ]
 
     def _resolve_channel_id(self) -> str:
-        channel_id = self.source.channel_id or self.channel_resolver.get_channel_id(self.source.id)
+        channel_id = self.channel_resolver.get_channel_id(self.source.id) or self.source.channel_id
         if not channel_id:
             raise ValueError(f"Source {self.source.id} has no channel_id")
         return channel_id

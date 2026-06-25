@@ -19,6 +19,7 @@ DEFAULT_PUBLISHED_TIMEZONE = "Asia/Seoul"
 ADAPTER_PARAM_KEYS = frozenset(
     {
         "item_id_field",
+        "ordering_field",
         "title_field",
         "published_field",
         "published_timezone",
@@ -110,11 +111,10 @@ class DataTablesRowMapper:
     def map(self, row: Mapping[str, Any], cfg: SourceConfig) -> Item:
         item_id_field = self._field_param(cfg, "item_id_field")
         title_field = self._field_param(cfg, "title_field")
-        published_field = self._field_param(cfg, "published_field")
+        published_field = self._optional_field_param(cfg, "published_field")
 
         item_id = self._required(row, item_id_field, cfg)
         title = self._required(row, title_field, cfg)
-        published_value = self._required(row, published_field, cfg)
 
         if cfg.detail_url is None:
             raise DataTablesAdapterError(f"Source {cfg.id} requires detail_url")
@@ -123,13 +123,37 @@ class DataTablesRowMapper:
             item_id=str(item_id),
             title=str(title),
             link=cfg.detail_url.format(id=item_id),
-            published=self.parse_published(published_value, cfg, published_field),
+            published=self._published(row, cfg, published_field),
         )
 
     def published_at(self, row: Mapping[str, Any], cfg: SourceConfig) -> datetime:
         published_field = self._field_param(cfg, "published_field")
         published_value = self._required(row, published_field, cfg)
         return self.parse_published(published_value, cfg, published_field)
+
+    def ordering_value(self, row: Mapping[str, Any], cfg: SourceConfig) -> datetime | float | str:
+        ordering_field = self._optional_field_param(cfg, "ordering_field")
+        published_field = self._optional_field_param(cfg, "published_field")
+        field = ordering_field or published_field
+        if field is None:
+            raise DataTablesAdapterError(f"Source {cfg.id} requires params.published_field or params.ordering_field")
+
+        value = self._required(row, field, cfg)
+        if published_field is not None and field == published_field:
+            return self.parse_published(value, cfg, field)
+        if isinstance(value, bool):
+            raise DataTablesAdapterError(f"Source {cfg.id} field {field!r} must be sortable")
+        if isinstance(value, int | float):
+            return float(value)
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                raise DataTablesAdapterError(f"Source {cfg.id} row missing required field {field!r}")
+            try:
+                return float(stripped)
+            except ValueError:
+                return stripped
+        raise DataTablesAdapterError(f"Source {cfg.id} field {field!r} must be sortable")
 
     def parse_published(self, value: object, cfg: SourceConfig, field: str) -> datetime:
         if not isinstance(value, str):
@@ -144,9 +168,17 @@ class DataTablesRowMapper:
         return parsed.astimezone(timezone)
 
     def _field_param(self, cfg: SourceConfig, param: str) -> str:
-        value = cfg.params.get(param)
-        if not isinstance(value, str) or not value.strip():
+        value = self._optional_field_param(cfg, param)
+        if value is None:
             raise DataTablesAdapterError(f"Source {cfg.id} requires params.{param}")
+        return value
+
+    def _optional_field_param(self, cfg: SourceConfig, param: str) -> str | None:
+        value = cfg.params.get(param)
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise DataTablesAdapterError(f"Source {cfg.id} params.{param} must be a non-empty string")
         return value.strip()
 
     def _required(self, row: Mapping[str, Any], field: str, cfg: SourceConfig) -> Any:
@@ -164,18 +196,38 @@ class DataTablesRowMapper:
         except ZoneInfoNotFoundError as exc:
             raise DataTablesAdapterError(f"Source {cfg.id} has unknown timezone {raw_timezone!r}") from exc
 
+    def _published(self, row: Mapping[str, Any], cfg: SourceConfig, published_field: str | None) -> datetime | None:
+        if published_field is None:
+            return None
+        published_value = self._required(row, published_field, cfg)
+        return self.parse_published(published_value, cfg, published_field)
+
 
 @dataclass(frozen=True)
 class DataTablesOrderingValidator:
     row_mapper: DataTablesRowMapper = DataTablesRowMapper()
 
     def validate_newest_first(self, rows: list[Mapping[str, Any]], cfg: SourceConfig) -> None:
-        previous: datetime | None = None
+        previous: datetime | float | str | None = None
         for index, row in enumerate(rows):
-            current = self.row_mapper.published_at(row, cfg)
-            if previous is not None and current > previous:
+            current = self.row_mapper.ordering_value(row, cfg)
+            if previous is not None and self._is_newer(current, previous, cfg):
                 raise DataTablesAdapterError(f"Source {cfg.id} rows are not newest-first at index {index}")
             previous = current
+
+    def _is_newer(
+        self,
+        current: datetime | float | str,
+        previous: datetime | float | str,
+        cfg: SourceConfig,
+    ) -> bool:
+        if isinstance(current, datetime) and isinstance(previous, datetime):
+            return current > previous
+        if isinstance(current, float) and isinstance(previous, float):
+            return current > previous
+        if isinstance(current, str) and isinstance(previous, str):
+            return current > previous
+        raise DataTablesAdapterError(f"Source {cfg.id} ordering field produced mixed value types")
 
 
 class DataTablesAdapter(SourcePort):

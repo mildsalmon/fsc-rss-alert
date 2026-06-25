@@ -149,10 +149,20 @@ def test_attempt_success_and_failure_timestamps_are_separate(tmp_path: Path) -> 
         repo.record_attempt("lawreq")
         repo.record_failure("lawreq", "NETWORK")
 
+        state = repo.get_state("lawreq")
+        assert state.last_attempt_at is not None
+        assert state.last_success_at is None
+        assert state.consecutive_failures == 1
+        assert state.last_failure_reason == "NETWORK"
+
         failed_row = source_row(db_path, "lawreq")
         assert failed_row["last_attempt_at"] is not None
         assert failed_row["last_success_at"] is None
         assert failed_row["consecutive_failures"] == 1
+        assert failed_row["last_failure_reason"] == "NETWORK"
+
+        repo.mark_failure_alert_sent("lawreq")
+        assert repo.get_state("lawreq").failure_alert_sent is True
 
         repo.record_success("lawreq")
 

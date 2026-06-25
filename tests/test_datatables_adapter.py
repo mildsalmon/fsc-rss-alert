@@ -111,6 +111,22 @@ def test_map_row_uses_configured_field_names() -> None:
     assert offset.total_seconds() == 0
 
 
+def test_map_row_allows_sources_without_published_field_when_ordering_field_exists() -> None:
+    cfg = make_source(params={"published_field": None, "ordering_field": "rownumber"})
+
+    item = DataTablesRowMapper().map({"lawreqIdx": 123, "title": "No date", "rownumber": 2578}, cfg)
+
+    assert item.item_id == "123"
+    assert item.published is None
+    DataTablesOrderingValidator().validate_newest_first(
+        [
+            {"lawreqIdx": 123, "title": "Newer", "rownumber": 2578},
+            {"lawreqIdx": 122, "title": "Older", "rownumber": 2577},
+        ],
+        cfg,
+    )
+
+
 def test_map_row_converts_aware_reg_dt_to_kst() -> None:
     item = DataTablesRowMapper().map(
         {"lawreqIdx": "abc", "title": "Notice", "regDt": "2026-06-21T00:30:00Z"},
