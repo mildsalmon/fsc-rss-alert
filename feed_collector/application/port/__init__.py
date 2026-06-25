@@ -6,6 +6,7 @@ from feed_collector.application.port.output import (
     NotifierPort,
     SeenStatePort,
     SourcePort,
+    SourceRunState,
     SourceStatePort,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "PollInputPort",
     "SeenStatePort",
     "SourcePort",
+    "SourceRunState",
     "SourceStatePort",
 ]

@@ -1,0 +1,30 @@
+- id: mofa
+  slug: mofa-sanctions
+  name: MOFA 독자제재
+  mechanism: rss
+  parser_version: 1
+  channel_id:
+  interval_minutes: 30
+  url: https://www.mofa.go.kr/www/brd/rss.do?brdId=235
+  params:
+    fetch_profile: mofa_cookie_gate
+  empty_result_policy: error
+
+- id: lawreq
+  slug: fsc-lawreq
+  name: 금융위 법령해석
+  mechanism: datatables
+  parser_version: 1
+  channel_id:
+  interval_minutes: 30
+  url: https://better.fsc.go.kr/fsc_new/replyCase/selectReplyCaseLawreqList.do
+  params:
+    stNo: 11
+    muNo: 85
+    muGpNo: 75
+    item_id_field: lawreqIdx
+    title_field: title
+    ordering_field: lawreqNumber
+  list_path: data
+  detail_url: https://better.fsc.go.kr/fsc_new/replyCase/LawreqDetail.do?lawreqIdx={id}
+  empty_result_policy: error
