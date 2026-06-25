@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import feedparser
 from dateutil import parser as date_parser
@@ -67,6 +68,7 @@ def _entry_to_item(entry: Any, source_id: str) -> Item | None:
     item_id = _entry_text(entry, "guid") or _entry_text(entry, "id") or _entry_text(entry, "link")
     if not item_id:
         return None
+    link = normalize_http_443_url(_entry_text(entry, "link"))
 
     published_text = (
         _entry_text(entry, "published")
@@ -80,9 +82,9 @@ def _entry_to_item(entry: Any, source_id: str) -> Item | None:
         raise PollError(f"RSS entry has invalid published date for {source_id}: {published_text}") from exc
 
     return Item(
-        item_id=item_id,
+        item_id=normalize_http_443_url(item_id),
         title=_entry_text(entry, "title") or "(untitled)",
-        link=_entry_text(entry, "link") or "",
+        link=link,
         published=published,
     )
 
@@ -92,4 +94,15 @@ def _entry_text(entry: Any, key: str) -> str:
     return str(value).strip() if value is not None else ""
 
 
-__all__ = ["RssAdapter", "RssAdapterFactory", "parse_items"]
+def normalize_http_443_url(value: str) -> str:
+    parsed = urlsplit(value)
+    try:
+        port = parsed.port
+    except ValueError:
+        return value
+    if parsed.scheme != "http" or port != 443 or parsed.hostname is None:
+        return value
+    return urlunsplit(("https", parsed.hostname, parsed.path, parsed.query, parsed.fragment))
+
+
+__all__ = ["RssAdapter", "RssAdapterFactory", "normalize_http_443_url", "parse_items"]
