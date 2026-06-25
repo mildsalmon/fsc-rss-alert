@@ -117,6 +117,17 @@ def test_seen_items_are_isolated_by_source(tmp_path: Path) -> None:
         assert repo.filter_new("source-b", [make_item("same-id")]) == [make_item("same-id")]
 
 
+def test_seen_contains_accepts_legacy_http_443_url(tmp_path: Path) -> None:
+    with SqliteStateRepo(tmp_path / "feed.db") as repo:
+        repo.mark_seen("mofa", ["http://www.mofa.go.kr:443/www/brd/m_4080/view.do?seq=377346"])
+
+        assert repo.seen_contains("mofa", "https://www.mofa.go.kr/www/brd/m_4080/view.do?seq=377346") is True
+        assert repo.filter_new(
+            "mofa",
+            [make_item("https://www.mofa.go.kr/www/brd/m_4080/view.do?seq=377346")],
+        ) == []
+
+
 def test_replace_baseline_and_mark_seen_are_idempotent(tmp_path: Path) -> None:
     db_path = tmp_path / "feed.db"
 

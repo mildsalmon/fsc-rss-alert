@@ -142,6 +142,24 @@ def test_rss_adapter_uses_link_when_guid_is_missing_through_public_parser() -> N
     assert item.item_id == "https://example.test/link"
 
 
+def test_rss_adapter_normalizes_http_443_links() -> None:
+    feed_bytes = b"""<?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0">
+      <channel>
+        <item>
+          <title>MOFA item</title>
+          <link>http://www.mofa.go.kr:443/www/brd/m_4080/view.do?seq=377346</link>
+        </item>
+      </channel>
+    </rss>
+    """
+
+    item = parse_items(feed_bytes, source_id="mofa")[0]
+
+    assert item.item_id == "https://www.mofa.go.kr/www/brd/m_4080/view.do?seq=377346"
+    assert item.link == "https://www.mofa.go.kr/www/brd/m_4080/view.do?seq=377346"
+
+
 def test_mofa_cookie_gate_fetcher_uses_two_hit_flow_with_bounded_redirects() -> None:
     session = FakeSession(
         [
