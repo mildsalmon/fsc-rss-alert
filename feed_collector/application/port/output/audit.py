@@ -6,4 +6,11 @@ from feed_collector.domain import Item
 
 
 class AuditPort(Protocol):
-    def log(self, source_id: str, item: Item) -> None: ...
+    def log_sent_delivery(
+        self,
+        source_id: str,
+        item: Item,
+        *,
+        channel_id: str,
+        delivery_id: str | None = None,
+    ) -> None: ...

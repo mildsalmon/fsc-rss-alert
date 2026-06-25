@@ -1,6 +1,7 @@
 from feed_collector.application.port.input import PollInputPort
 from feed_collector.application.port.output import (
     AuditPort,
+    ChannelProvisionerPort,
     ChannelResolverPort,
     NotifierPort,
     SeenStatePort,
@@ -10,6 +11,7 @@ from feed_collector.application.port.output import (
 
 __all__ = [
     "AuditPort",
+    "ChannelProvisionerPort",
     "ChannelResolverPort",
     "NotifierPort",
     "PollInputPort",

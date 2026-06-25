@@ -51,20 +51,29 @@ class FakeState:
 @dataclass
 class FakeNotifier:
     fail_on: str | None = None
+    delivery_id: str | None = None
     sent: list[tuple[str, Item]] = field(default_factory=list)
 
-    def send(self, channel_id: str, item: Item) -> None:
+    def send(self, channel_id: str, item: Item) -> str | None:
         if item.item_id == self.fail_on:
             raise RuntimeError("send failed")
         self.sent.append((channel_id, item))
+        return self.delivery_id
 
 
 @dataclass
 class FakeAudit:
-    logged: list[tuple[str, Item]] = field(default_factory=list)
+    logged: list[tuple[str, Item, str | None, str | None, str]] = field(default_factory=list)
 
-    def log(self, source_id: str, item: Item) -> None:
-        self.logged.append((source_id, item))
+    def log_sent_delivery(
+        self,
+        source_id: str,
+        item: Item,
+        *,
+        channel_id: str,
+        delivery_id: str | None = None,
+    ) -> None:
+        self.logged.append((source_id, item, channel_id, delivery_id, "sent"))
 
 
 def make_source(channel_id: str | None = "C123") -> SourceConfig:
@@ -130,11 +139,22 @@ def test_poll_sends_new_items_oldest_first_and_marks_seen_after_audit() -> None:
 
     assert result.new_items == (older, newer)
     assert [item.item_id for _, item in notifier.sent] == ["older", "newer"]
-    assert [item.item_id for _, item in audit.logged] == ["older", "newer"]
-    assert state.marked_batches == [["older", "newer"]]
+    assert [item.item_id for _, item, _, _, _ in audit.logged] == ["older", "newer"]
+    assert state.marked_batches == [["older"], ["newer"]]
 
 
-def test_poll_send_failure_does_not_advance_any_seen_state() -> None:
+def test_poll_passes_delivery_metadata_to_audit() -> None:
+    item = make_item("fresh")
+    state = FakeState(first_run=False)
+    notifier = FakeNotifier(delivery_id="123.456")
+    audit = FakeAudit()
+
+    make_service([item], state, notifier, audit).poll()
+
+    assert audit.logged == [("mofa", item, "C123", "123.456", "sent")]
+
+
+def test_poll_send_failure_keeps_successful_delivery_seen() -> None:
     first = make_item("first", datetime(2026, 1, 1, tzinfo=timezone.utc))
     second = make_item("fails", datetime(2026, 1, 2, tzinfo=timezone.utc))
     state = FakeState(first_run=False)
@@ -145,9 +165,9 @@ def test_poll_send_failure_does_not_advance_any_seen_state() -> None:
         make_service([first, second], state, notifier, audit).poll()
 
     assert [item.item_id for _, item in notifier.sent] == ["first"]
-    assert [item.item_id for _, item in audit.logged] == ["first"]
-    assert state.marked_batches == []
-    assert "first" not in state.seen
+    assert [item.item_id for _, item, _, _, _ in audit.logged] == ["first"]
+    assert state.marked_batches == [["first"]]
+    assert "first" in state.seen
     assert "fails" not in state.seen
 
 
