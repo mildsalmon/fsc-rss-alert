@@ -58,6 +58,17 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
     assert isinstance(lawreq_adapter, DataTablesAdapter)
 
 
+def test_default_lawreq_detail_url_keeps_menu_params() -> None:
+    sources = {source.id: source for source in load_sources(Path("sources.yaml"))}
+
+    lawreq = sources["lawreq"]
+
+    assert (
+        lawreq.detail_url
+        == "https://better.fsc.go.kr/fsc_new/replyCase/LawreqDetail.do?stNo=11&muNo=85&muGpNo=75&lawreqIdx={id}"
+    )
+
+
 def test_load_sources_rejects_bad_source_shape(tmp_path: Path) -> None:
     sources_file = tmp_path / "sources.yaml"
     sources_file.write_text("- id: missing-required-fields\n", encoding="utf-8")

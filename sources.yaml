@@ -26,5 +26,5 @@
     title_field: title
     ordering_field: lawreqNumber
   list_path: data
-  detail_url: https://better.fsc.go.kr/fsc_new/replyCase/LawreqDetail.do?lawreqIdx={id}
+  detail_url: https://better.fsc.go.kr/fsc_new/replyCase/LawreqDetail.do?stNo=11&muNo=85&muGpNo=75&lawreqIdx={id}
   empty_result_policy: error
