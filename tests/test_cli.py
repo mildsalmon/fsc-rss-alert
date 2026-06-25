@@ -38,7 +38,7 @@ class FakeNotifier:
 
 @dataclass
 class FakeProvisioner:
-    channels: dict[str, str] = field(default_factory=lambda: {"feed-ops": "COPS", "source": "CSOURCE"})
+    channels: dict[str, str] = field(default_factory=lambda: {"ops": "COPS", "source": "CSOURCE"})
     requested: list[str] = field(default_factory=list)
 
     def ensure_feed_channel(self, slug: str) -> str:
@@ -174,11 +174,13 @@ def test_poll_runner_records_failure_reason_and_sends_immediate_ops_alert(tmp_pa
     source = make_source()
     adapter = FakeAdapter(error=PollError("Feed fetch returned HTTP 404"))
     notifier = FakeNotifier()
+    provisioner = FakeProvisioner()
     runner, source_state, seen_state, channel_repo, audit = make_runner(
         tmp_path,
         source=source,
         adapter=adapter,
         notifier=notifier,
+        provisioner=provisioner,
     )
     try:
         assert runner.run() == 1
@@ -187,6 +189,7 @@ def test_poll_runner_records_failure_reason_and_sends_immediate_ops_alert(tmp_pa
         assert state.consecutive_failures == 1
         assert state.last_failure_reason == FetchFailureReason.NOT_FOUND.value
         assert state.failure_alert_sent is True
+        assert provisioner.requested == ["ops"]
         assert channel_repo.get_channel_id("feed-ops") == "COPS"
         assert len(notifier.sent) == 1
         assert notifier.sent[0][0] == "COPS"

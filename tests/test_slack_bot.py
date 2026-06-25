@@ -115,6 +115,21 @@ def test_slack_bot_notifier_posts_chat_message() -> None:
     }
 
 
+def test_slack_bot_notifier_posts_plain_text_message() -> None:
+    session = FakeSlackSession([FakeResponse({"ok": True, "ts": "123.456"})])
+    notifier = SlackBotNotifier(bot_token="xoxb-test", session=session)
+
+    delivery_id = notifier.send_text("COPS", "daily digest")
+
+    assert delivery_id == "123.456"
+    assert session.posts[0]["json"] == {
+        "channel": "COPS",
+        "text": "daily digest",
+        "unfurl_links": False,
+        "mrkdwn": False,
+    }
+
+
 def test_slack_bot_notifier_rejects_malformed_success_without_ts() -> None:
     session = FakeSlackSession([FakeResponse({"ok": True})])
     notifier = SlackBotNotifier(bot_token="xoxb-test", session=session)

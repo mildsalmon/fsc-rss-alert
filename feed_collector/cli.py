@@ -31,6 +31,7 @@ from feed_collector.application.port.output import (
 )
 from feed_collector.application.service.poll import PollService
 from feed_collector.config import DEFAULT_FAILURE_THRESHOLD, DEFAULT_TIMEOUT_SECONDS, int_from_env
+from feed_collector.digest import DEFAULT_STALE_MULTIPLIER, build_daily_digest, format_digest_message
 from feed_collector.domain import Item, SourceConfig
 from feed_collector.errors import FetchFailureReason, PollError, infer_from_error
 from feed_collector.registry import SourceAdapterFactory, SourceAdapterRegistry, load_sources
@@ -48,6 +49,8 @@ IMMEDIATE_FAILURE_REASONS = frozenset(
         FetchFailureReason.NOT_FOUND,
     }
 )
+OPS_CHANNEL_STATE_ID = "feed-ops"
+OPS_CHANNEL_SLUG = "ops"
 
 
 @dataclass(frozen=True)
@@ -187,13 +190,13 @@ class PollRunner:
             print(f"[{source.id}] failure alert could not be sent: {alert_error}", file=sys.stderr)
 
     def _ops_channel_id(self) -> str:
-        channel_id = self.channel_repo.get_channel_id("feed-ops")
+        channel_id = self.channel_repo.get_channel_id(OPS_CHANNEL_STATE_ID)
         if channel_id:
             return channel_id
         if self.channel_provisioner is None:
             raise PollError("feed-ops channel provisioner is not configured")
-        channel_id = self.channel_provisioner.ensure_feed_channel("feed-ops")
-        self.channel_repo.set_channel_id("feed-ops", channel_id)
+        channel_id = self.channel_provisioner.ensure_feed_channel(OPS_CHANNEL_SLUG)
+        self.channel_repo.set_channel_id(OPS_CHANNEL_STATE_ID, channel_id)
         return channel_id
 
     def _now(self) -> datetime:
@@ -414,15 +417,53 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     poll_parser.set_defaults(handler=run_poll)
 
-    digest_parser = subparsers.add_parser("digest", help="Reserved for T7 daily digest.")
+    digest_parser = subparsers.add_parser("digest", help="Send the daily feed-ops digest.")
+    digest_parser.add_argument("--sources-file", default="sources.yaml", help="Path to source registry YAML.")
+    digest_parser.add_argument("--db-path", default=DEFAULT_DB_PATH, help="Path to sqlite state database.")
+    digest_parser.add_argument("--lock-file", default=DEFAULT_LOCK_PATH, help="Path to the single-run lock file.")
+    digest_parser.add_argument(
+        "--stale-multiplier",
+        type=int,
+        default=int_from_env("DIGEST_STALE_MULTIPLIER", DEFAULT_STALE_MULTIPLIER),
+        help="Warn when last success is older than interval_minutes multiplied by this value.",
+    )
+    digest_parser.add_argument(
+        "--slack-timeout-seconds",
+        type=int,
+        default=int_from_env("SLACK_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS),
+        help="Slack API timeout.",
+    )
     digest_parser.set_defaults(handler=run_digest)
     return parser.parse_args(normalized_argv)
 
 
 def run_digest(args: argparse.Namespace) -> int:
-    del args
-    print("digest is not implemented in T6; it is reserved for T7.", file=sys.stderr)
-    return 2
+    sources = load_sources(args.sources_file)
+    lock = try_acquire_poll_lock(args.lock_file)
+    if lock is None:
+        print("Another feed_collector poll or digest is already running.")
+        return 0
+
+    with lock:
+        with (
+            SqliteAuditLog(args.db_path) as audit,
+            SqliteChannelRepo(args.db_path) as channel_repo,
+        ):
+            digest = build_daily_digest(
+                args.db_path,
+                sources,
+                stale_multiplier=args.stale_multiplier,
+            )
+            audit.prune(now=digest.generated_at)
+            channel_manager = SlackChannelManager(timeout_seconds=args.slack_timeout_seconds)
+            channel_id = ensure_ops_channel_id(channel_repo, channel_manager)
+            SlackBotNotifier(timeout_seconds=args.slack_timeout_seconds).send_text(
+                channel_id,
+                format_digest_message(digest),
+            )
+
+    print(f"Sent daily digest for {digest.window.target_date.isoformat()} to feed-ops.")
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -469,9 +510,22 @@ def _db_exists(db_path: str | Path) -> bool:
     return str(db_path) != ":memory:" and Path(db_path).exists()
 
 
+def ensure_ops_channel_id(
+    channel_repo: ChannelStateStore,
+    channel_provisioner: ChannelProvisionerPort,
+) -> str:
+    channel_id = channel_repo.get_channel_id(OPS_CHANNEL_STATE_ID)
+    if channel_id:
+        return channel_id
+    channel_id = channel_provisioner.ensure_feed_channel(OPS_CHANNEL_SLUG)
+    channel_repo.set_channel_id(OPS_CHANNEL_STATE_ID, channel_id)
+    return channel_id
+
+
 __all__ = [
     "PollRunner",
     "SourceChannelResolver",
+    "ensure_ops_channel_id",
     "failure_alert_item",
     "is_due",
     "main",
