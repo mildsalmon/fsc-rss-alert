@@ -223,7 +223,7 @@ class SlackChannelManager(ChannelProvisionerPort):
     def find_channel_by_name(self, name: str) -> Mapping[str, Any] | None:
         cursor = ""
         while True:
-            params = {"exclude_archived": "true", "limit": "1000", "types": "public_channel,private_channel"}
+            params = {"exclude_archived": "true", "limit": "1000", "types": "public_channel"}
             if cursor:
                 params["cursor"] = cursor
             data = self.api.get("conversations.list", params)
