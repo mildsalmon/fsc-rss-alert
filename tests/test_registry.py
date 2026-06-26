@@ -4,7 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from feed_collector.adapter.outbound import DataTablesAdapter, HtmlScrapeAdapter, MofaCookieGateFetcher, RssAdapter
+from feed_collector.adapter.outbound import (
+    DataTablesAdapter,
+    HtmlScrapeAdapter,
+    JsonBoardAdapter,
+    MofaCookieGateFetcher,
+    RssAdapter,
+)
 from feed_collector.errors import PollError
 from feed_collector.registry import SourceAdapterRegistry, load_sources
 
@@ -70,17 +76,35 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
             link_href_contains: po040301/view
             published_regex: (?P<date>\\d{4}-\\d{2}-\\d{2})$
           empty_result_policy: error
+        - id: fiu-sanctions
+          slug: fiu-sanctions
+          name: FIU sanctions
+          mechanism: json_board
+          parser_version: 1
+          channel_id:
+          interval_minutes: 30
+          url: https://www.kofiu.go.kr/cmn/board/selectBoardListFile.do
+          params:
+            seCd: "0022"
+            item_id_field: ntcnYardOrdrNo
+            title_field: ntcnYardSjNm
+            published_field: ntcnYardRgiDt
+            ordering_field: ntcnYardOrdrNo
+          list_path: result
+          detail_url: https://www.kofiu.go.kr/kor/notification/sanctions_view.do?ntcnYardOrdrNo={id}&seCd=0022
+          empty_result_policy: error
         """,
         encoding="utf-8",
     )
 
-    mofa, lawreq, fss, fsc_legislation = load_sources(sources_file)
+    mofa, lawreq, fss, fsc_legislation, fiu = load_sources(sources_file)
     registry = SourceAdapterRegistry()
 
     mofa_adapter = registry.create(mofa)
     lawreq_adapter = registry.create(lawreq)
     fss_adapter = registry.create(fss)
     fsc_legislation_adapter = registry.create(fsc_legislation)
+    fiu_adapter = registry.create(fiu)
 
     assert mofa.params["fetch_profile"] == "mofa_cookie_gate"
     assert isinstance(mofa_adapter, RssAdapter)
@@ -88,6 +112,7 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
     assert isinstance(lawreq_adapter, DataTablesAdapter)
     assert isinstance(fss_adapter, HtmlScrapeAdapter)
     assert isinstance(fsc_legislation_adapter, HtmlScrapeAdapter)
+    assert isinstance(fiu_adapter, JsonBoardAdapter)
 
 
 def test_default_better_fsc_detail_urls_keep_menu_params() -> None:
@@ -134,6 +159,21 @@ def test_default_fsc_legislation_source_uses_html_scrape_config() -> None:
     assert fsc_legislation.params["row_tag"] == "li"
     assert fsc_legislation.params["item_id_query_param"] == "noticeId"
     assert fsc_legislation.params["link_href_contains"] == "po040301/view"
+
+
+def test_default_fiu_source_uses_json_board_config() -> None:
+    sources = {source.id: source for source in load_sources(Path("sources.yaml"))}
+
+    fiu = sources["fiu-sanctions"]
+
+    assert fiu.name == "FIU 제재공시"
+    assert fiu.slug == "fiu-sanctions"
+    assert fiu.mechanism == "json_board"
+    assert fiu.url == "https://www.kofiu.go.kr/cmn/board/selectBoardListFile.do"
+    assert fiu.params["seCd"] == "0022"
+    assert fiu.params["item_id_field"] == "ntcnYardOrdrNo"
+    assert fiu.params["ordering_field"] == "ntcnYardOrdrNo"
+    assert fiu.list_path == "result"
 
 
 def test_load_sources_rejects_bad_source_shape(tmp_path: Path) -> None:

@@ -14,6 +14,14 @@ from feed_collector.adapter.outbound.http_fetch import (
     HttpFetcherFactory,
     MofaCookieGateFetcher,
 )
+from feed_collector.adapter.outbound.json_board import (
+    JsonBoardAdapter,
+    JsonBoardHttpClient,
+    JsonBoardOrderingValidator,
+    JsonBoardRequestBuilder,
+    JsonBoardRowMapper,
+    JsonBoardRowsExtractor,
+)
 from feed_collector.adapter.outbound.html_scrape import (
     HtmlCell,
     HtmlLink,
@@ -55,6 +63,12 @@ __all__ = [
     "HtmlScrapeAdapterFactory",
     "HttpClient",
     "HttpFetcherFactory",
+    "JsonBoardAdapter",
+    "JsonBoardHttpClient",
+    "JsonBoardOrderingValidator",
+    "JsonBoardRequestBuilder",
+    "JsonBoardRowMapper",
+    "JsonBoardRowsExtractor",
     "MofaCookieGateFetcher",
     "RssAdapter",
     "RssAdapterFactory",
