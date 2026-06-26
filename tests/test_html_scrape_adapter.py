@@ -38,6 +38,35 @@ FSS_HTML = """
 """
 
 
+FSC_LEGISLATION_HTML = """
+<html>
+  <body>
+    <ul class="board-list">
+      <li>
+        <div class="inner">
+          <div class="count">1405</div>
+          <div class="cont">
+            <div class="subject">
+              <a href="./po040301/view?noticeId=4153&curPage=&srchKey=&srchText=&srchBeginDt=&srchEndDt="
+                 title="「신용협동조합법 시행령」 일부개정령(안) 입법예고">
+                「신용협동조합법 시행령」 일부개정령(안) 입법예고
+              </a>
+            </div>
+            <div class="info">
+              <span>구분 : 입법예고</span>
+              <span>법률구분 : 신용협동조합법 시행령</span>
+              <span>예고기간 : 2026-06-05 ~ 2026-07-15</span>
+            </div>
+          </div>
+          <div class="day">2026-06-05</div>
+        </div>
+      </li>
+    </ul>
+  </body>
+</html>
+"""
+
+
 @dataclass
 class FakeFetcher:
     payload: bytes
@@ -71,6 +100,31 @@ def make_source(
     )
 
 
+def make_fsc_legislation_source(
+    *,
+    params: dict[str, ParamValue] | None = None,
+    empty_result_policy: EmptyResultPolicy = "error",
+) -> SourceConfig:
+    base_params: dict[str, ParamValue] = {
+        "row_tag": "li",
+        "item_id_query_param": "noticeId",
+        "link_href_contains": "po040301/view",
+        "published_regex": r"(?P<date>\d{4}-\d{2}-\d{2})$",
+    }
+    return SourceConfig(
+        id="fsc-legislation",
+        slug="fsc-legislation",
+        name="금융위 입법예고/규정변경예고",
+        mechanism="html",
+        parser_version=1,
+        channel_id=None,
+        interval_minutes=30,
+        url="https://www.fsc.go.kr/po040301",
+        params=base_params | (params or {}),
+        empty_result_policy=empty_result_policy,
+    )
+
+
 def test_parse_html_rows_collects_cells_and_links() -> None:
     rows = parse_html_rows(FSS_HTML)
 
@@ -94,6 +148,24 @@ def test_html_scrape_adapter_maps_fss_table_rows_to_items() -> None:
     assert items[0].published == datetime(2026, 6, 26, tzinfo=ZoneInfo("Asia/Seoul"))
 
 
+def test_html_scrape_adapter_maps_fsc_legislation_list_rows_to_items() -> None:
+    adapter = HtmlScrapeAdapter(
+        make_fsc_legislation_source(),
+        fetcher=FakeFetcher(FSC_LEGISLATION_HTML.encode()),
+    )
+
+    items = adapter.fetch()
+
+    assert len(items) == 1
+    assert items[0].item_id == "4153"
+    assert items[0].title == "「신용협동조합법 시행령」 일부개정령(안) 입법예고"
+    assert (
+        items[0].link
+        == "https://www.fsc.go.kr/po040301/view?noticeId=4153&curPage=&srchKey=&srchText=&srchBeginDt=&srchEndDt="
+    )
+    assert items[0].published == datetime(2026, 6, 5, tzinfo=ZoneInfo("Asia/Seoul"))
+
+
 def test_html_scrape_adapter_errors_on_empty_required_source() -> None:
     adapter = HtmlScrapeAdapter(make_source(), fetcher=FakeFetcher(b"<html></html>"))
 
@@ -115,4 +187,12 @@ def test_html_scrape_adapter_requires_valid_date_cell() -> None:
     adapter = HtmlScrapeAdapter(source, fetcher=FakeFetcher(FSS_HTML.encode()))
 
     with pytest.raises(HtmlScrapeAdapterError, match="date_cell_index"):
+        adapter.fetch()
+
+
+def test_html_scrape_adapter_errors_on_missing_published_regex_match() -> None:
+    source = make_fsc_legislation_source(params={"published_regex": r"게시일 : (?P<date>\d{4}-\d{2}-\d{2})"})
+    adapter = HtmlScrapeAdapter(source, fetcher=FakeFetcher(FSC_LEGISLATION_HTML.encode()))
+
+    with pytest.raises(HtmlScrapeAdapterError, match="published_regex"):
         adapter.fetch()
