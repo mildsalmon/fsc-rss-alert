@@ -7,6 +7,7 @@ from typing import Any, cast
 
 import yaml
 
+from feed_collector.adapter.outbound.bulk_sdn import BulkSdnAdapterFactory
 from feed_collector.adapter.outbound.datatables import DataTablesAdapter
 from feed_collector.adapter.outbound.html_scrape import HtmlScrapeAdapterFactory
 from feed_collector.adapter.outbound.http_fetch import HttpFetcherFactory
@@ -32,6 +33,7 @@ class SourceAdapterRegistry:
     datatables_factory: SourceAdapterFactory = DataTablesAdapter
     html_factory: HtmlScrapeAdapterFactory = field(default_factory=lambda: HtmlScrapeAdapterFactory(HttpFetcherFactory()))
     json_board_factory: SourceAdapterFactory = JsonBoardAdapter
+    bulk_factory: BulkSdnAdapterFactory = field(default_factory=lambda: BulkSdnAdapterFactory(HttpFetcherFactory()))
 
     def create(self, source: SourceConfig) -> SourcePort:
         if source.mechanism == "rss":
@@ -42,6 +44,8 @@ class SourceAdapterRegistry:
             return self.html_factory.create(source)
         if source.mechanism == "json_board":
             return self.json_board_factory(source)
+        if source.mechanism == "bulk":
+            return self.bulk_factory.create(source)
         raise PollError(f"Source {source.id} has unsupported mechanism {source.mechanism!r}")
 
     def __call__(self, source: SourceConfig) -> SourcePort:

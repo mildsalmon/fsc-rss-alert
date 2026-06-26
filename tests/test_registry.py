@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from feed_collector.adapter.outbound import (
+    BulkSdnAdapter,
     DataTablesAdapter,
     HtmlScrapeAdapter,
     JsonBoardAdapter,
@@ -93,11 +94,24 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
           list_path: result
           detail_url: https://www.kofiu.go.kr/kor/notification/sanctions_view.do?ntcnYardOrdrNo={id}&seCd=0022
           empty_result_policy: error
+        - id: ofac-sdn
+          slug: ofac-sdn
+          name: OFAC SDN
+          mechanism: bulk
+          parser_version: 1
+          channel_id:
+          interval_minutes: 30
+          url: https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.XML
+          params:
+            published_timezone: UTC
+            timeout_seconds: 60
+          detail_url: https://sanctionssearch.ofac.treas.gov/Details.aspx?id={id}
+          empty_result_policy: error
         """,
         encoding="utf-8",
     )
 
-    mofa, lawreq, fss, fsc_legislation, fiu = load_sources(sources_file)
+    mofa, lawreq, fss, fsc_legislation, fiu, ofac = load_sources(sources_file)
     registry = SourceAdapterRegistry()
 
     mofa_adapter = registry.create(mofa)
@@ -105,6 +119,7 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
     fss_adapter = registry.create(fss)
     fsc_legislation_adapter = registry.create(fsc_legislation)
     fiu_adapter = registry.create(fiu)
+    ofac_adapter = registry.create(ofac)
 
     assert mofa.params["fetch_profile"] == "mofa_cookie_gate"
     assert isinstance(mofa_adapter, RssAdapter)
@@ -113,6 +128,7 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
     assert isinstance(fss_adapter, HtmlScrapeAdapter)
     assert isinstance(fsc_legislation_adapter, HtmlScrapeAdapter)
     assert isinstance(fiu_adapter, JsonBoardAdapter)
+    assert isinstance(ofac_adapter, BulkSdnAdapter)
 
 
 def test_default_better_fsc_detail_urls_keep_menu_params() -> None:
@@ -174,6 +190,20 @@ def test_default_fiu_source_uses_json_board_config() -> None:
     assert fiu.params["item_id_field"] == "ntcnYardOrdrNo"
     assert fiu.params["ordering_field"] == "ntcnYardOrdrNo"
     assert fiu.list_path == "result"
+
+
+def test_default_ofac_source_uses_bulk_config() -> None:
+    sources = {source.id: source for source in load_sources(Path("sources.yaml"))}
+
+    ofac = sources["ofac-sdn"]
+
+    assert ofac.name == "OFAC SDN"
+    assert ofac.slug == "ofac-sdn"
+    assert ofac.mechanism == "bulk"
+    assert ofac.url == "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.XML"
+    assert ofac.params["published_timezone"] == "UTC"
+    assert ofac.params["timeout_seconds"] == 60
+    assert ofac.detail_url == "https://sanctionssearch.ofac.treas.gov/Details.aspx?id={id}"
 
 
 def test_load_sources_rejects_bad_source_shape(tmp_path: Path) -> None:
