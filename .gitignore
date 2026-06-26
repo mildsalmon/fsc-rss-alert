@@ -22,3 +22,7 @@ logs/
 # Local secrets
 .env
 .env.*
+
+# Local sqlite state
+feed.db
+feed.db-*
