@@ -262,7 +262,7 @@ def run_poll(args: argparse.Namespace) -> int:
 
     with lock:
         with (
-            SqliteStateRepo(args.db_path) as seen_state,
+            SqliteStateRepo(args.db_path, per_source_seen_limits=seen_limits_by_source(sources)) as seen_state,
             SqliteSourceStateRepo(args.db_path) as source_state,
             SqliteChannelRepo(args.db_path) as channel_repo,
             SqliteAuditLog(args.db_path) as audit,
@@ -279,6 +279,29 @@ def run_poll(args: argparse.Namespace) -> int:
                 failure_threshold=args.failure_threshold,
             )
             return runner.run(dry_run=args.dry_run, source_ids=args.source_ids)
+
+
+def seen_limits_by_source(sources: Sequence[SourceConfig]) -> dict[str, int | None]:
+    limits: dict[str, int | None] = {}
+    for source in sources:
+        if "max_seen_items_per_source" in source.params:
+            limits[source.id] = source_seen_limit(source)
+    return limits
+
+
+def source_seen_limit(source: SourceConfig) -> int | None:
+    raw = source.params.get("max_seen_items_per_source")
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        raise PollError(f"Source {source.id} param max_seen_items_per_source must be a positive integer or null")
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise PollError(f"Source {source.id} param max_seen_items_per_source must be a positive integer or null") from exc
+    if value < 1:
+        raise PollError(f"Source {source.id} param max_seen_items_per_source must be a positive integer or null")
+    return value
 
 
 @dataclass(frozen=True)

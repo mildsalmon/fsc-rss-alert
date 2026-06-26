@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Sequence
 from urllib.parse import urlsplit, urlunsplit
@@ -15,8 +16,10 @@ class SqliteStateRepo(SqliteRepoBase, SeenStatePort):
         db_path: str | Path = DEFAULT_DB_PATH,
         *,
         max_seen_items_per_source: int | None = 1000,
+        per_source_seen_limits: Mapping[str, int | None] | None = None,
     ) -> None:
         self.max_seen_items_per_source = max_seen_items_per_source
+        self.per_source_seen_limits = dict(per_source_seen_limits or {})
         super().__init__(db_path)
 
     def is_first_run(self, source_id: str) -> bool:
@@ -71,7 +74,8 @@ class SqliteStateRepo(SqliteRepoBase, SeenStatePort):
         )
 
     def _prune_seen(self, source_id: str) -> None:
-        if self.max_seen_items_per_source is None:
+        limit = self.per_source_seen_limits.get(source_id, self.max_seen_items_per_source)
+        if limit is None:
             return
 
         self._conn.execute(
@@ -86,7 +90,7 @@ class SqliteStateRepo(SqliteRepoBase, SeenStatePort):
                 LIMIT ?
               )
             """,
-            (source_id, source_id, self.max_seen_items_per_source),
+            (source_id, source_id, limit),
         )
 
 

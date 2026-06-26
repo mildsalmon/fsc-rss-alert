@@ -111,5 +111,6 @@
   params:
     published_timezone: UTC
     timeout_seconds: 60
+    max_seen_items_per_source:
   detail_url: https://sanctionssearch.ofac.treas.gov/Details.aspx?id={id}
   empty_result_policy: error

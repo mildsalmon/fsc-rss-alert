@@ -144,6 +144,30 @@ def test_replace_baseline_and_mark_seen_are_idempotent(tmp_path: Path) -> None:
     assert seen_count(db_path, "mofa") == 2
 
 
+def test_seen_items_prune_uses_global_limit_by_default(tmp_path: Path) -> None:
+    db_path = tmp_path / "feed.db"
+
+    with SqliteStateRepo(db_path, max_seen_items_per_source=2) as repo:
+        repo.replace_baseline("mofa", [make_item("one"), make_item("two"), make_item("three")])
+
+    assert seen_count(db_path, "mofa") == 2
+
+
+def test_seen_items_can_disable_prune_for_one_source(tmp_path: Path) -> None:
+    db_path = tmp_path / "feed.db"
+
+    with SqliteStateRepo(
+        db_path,
+        max_seen_items_per_source=2,
+        per_source_seen_limits={"ofac-sdn": None},
+    ) as repo:
+        repo.replace_baseline("mofa", [make_item("one"), make_item("two"), make_item("three")])
+        repo.replace_baseline("ofac-sdn", [make_item("one"), make_item("two"), make_item("three")])
+
+    assert seen_count(db_path, "mofa") == 2
+    assert seen_count(db_path, "ofac-sdn") == 3
+
+
 def test_content_hash_fallback_is_stable_for_items_without_source_key() -> None:
     published = datetime(2026, 1, 1, tzinfo=timezone.utc)
     first = Item(item_id="", title=" same ", link="", published=published)

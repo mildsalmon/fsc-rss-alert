@@ -105,6 +105,7 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
           params:
             published_timezone: UTC
             timeout_seconds: 60
+            max_seen_items_per_source:
           detail_url: https://sanctionssearch.ofac.treas.gov/Details.aspx?id={id}
           empty_result_policy: error
         """,
@@ -203,6 +204,7 @@ def test_default_ofac_source_uses_bulk_config() -> None:
     assert ofac.url == "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.XML"
     assert ofac.params["published_timezone"] == "UTC"
     assert ofac.params["timeout_seconds"] == 60
+    assert ofac.params["max_seen_items_per_source"] is None
     assert ofac.detail_url == "https://sanctionssearch.ofac.treas.gov/Details.aspx?id={id}"
 
 
