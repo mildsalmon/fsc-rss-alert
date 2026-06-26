@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Any, Protocol
+from html.parser import HTMLParser
+from typing import Any, Protocol, Sequence, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil import parser
@@ -22,6 +23,7 @@ ADAPTER_PARAM_KEYS = frozenset(
         "ordering_field",
         "title_field",
         "published_field",
+        "published_detail_label",
         "published_timezone",
     }
 )
@@ -32,6 +34,9 @@ class DataTablesAdapterError(ValueError):
 
 
 class DataTablesResponse(Protocol):
+    @property
+    def text(self) -> str: ...
+
     def raise_for_status(self) -> None: ...
 
     def json(self) -> object: ...
@@ -43,6 +48,13 @@ class DataTablesHttpSession(Protocol):
         url: str,
         *,
         data: Mapping[str, ParamValue],
+        timeout: int,
+    ) -> DataTablesResponse: ...
+
+    def get(
+        self,
+        url: str,
+        *,
         timeout: int,
     ) -> DataTablesResponse: ...
 
@@ -63,7 +75,7 @@ class DataTablesRequestBuilder:
 
 @dataclass(frozen=True)
 class DataTablesHttpClient:
-    session: DataTablesHttpSession = requests
+    session: DataTablesHttpSession = cast(DataTablesHttpSession, requests)
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
 
     def post_json(self, cfg: SourceConfig, request: Mapping[str, ParamValue]) -> object:
@@ -77,6 +89,14 @@ class DataTablesHttpClient:
             return response.json()
         except ValueError as exc:
             raise DataTablesAdapterError(f"Source {cfg.id} DataTables response was not valid JSON") from exc
+
+    def get_text(self, cfg: SourceConfig, url: str) -> str:
+        try:
+            response = self.session.get(url, timeout=self.timeout_seconds)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise DataTablesAdapterError(f"Source {cfg.id} detail request failed: {exc}") from exc
+        return response.text
 
 
 @dataclass(frozen=True)
@@ -258,6 +278,93 @@ class DataTablesAdapter(SourcePort):
         self.ordering_validator.validate_newest_first(rows, self.cfg)
         return [self.row_mapper.map(row, self.cfg) for row in rows]
 
+    def enrich_items(self, items: Sequence[Item]) -> list[Item]:
+        detail_label = self._published_detail_label()
+        if detail_label is None:
+            return list(items)
+        return [self._enrich_item(item, detail_label) for item in items]
+
+    def _enrich_item(self, item: Item, detail_label: str) -> Item:
+        if item.published is not None:
+            return item
+        if not item.link:
+            raise DataTablesAdapterError(f"Source {self.cfg.id} item {item.item_id} has no detail link")
+
+        html = self.http_client.get_text(self.cfg, item.link)
+        published_text = extract_detail_cell_text(html, detail_label)
+        if published_text is None:
+            raise DataTablesAdapterError(
+                f"Source {self.cfg.id} detail page missing published label {detail_label!r}"
+            )
+        published = self.row_mapper.parse_published(published_text, self.cfg, detail_label)
+        return replace(item, published=published)
+
+    def _published_detail_label(self) -> str | None:
+        value = self.cfg.params.get("published_detail_label")
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise DataTablesAdapterError(
+                f"Source {self.cfg.id} params.published_detail_label must be a non-empty string"
+            )
+        return value.strip()
+
+
+class DetailCellTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.cells: list[tuple[str, str]] = []
+        self._current_tag: str | None = None
+        self._current_parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        del attrs
+        if tag in {"script", "style"}:
+            self._skip_depth += 1
+            return
+        if self._skip_depth:
+            return
+        if tag in {"th", "td"} and self._current_tag is None:
+            self._current_tag = tag
+            self._current_parts = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style"} and self._skip_depth:
+            self._skip_depth -= 1
+            return
+        if self._skip_depth:
+            return
+        if tag == self._current_tag:
+            self.cells.append((tag, normalize_cell_text(" ".join(self._current_parts))))
+            self._current_tag = None
+            self._current_parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth or self._current_tag is None:
+            return
+        self._current_parts.append(data)
+
+
+def extract_detail_cell_text(html: str, label: str) -> str | None:
+    parser = DetailCellTextParser()
+    parser.feed(html)
+    expected_label = normalize_cell_text(label)
+
+    for index, (tag, text) in enumerate(parser.cells):
+        if tag != "th" or normalize_cell_text(text) != expected_label:
+            continue
+        for next_tag, next_text in parser.cells[index + 1 :]:
+            if next_tag == "td":
+                return next_text
+            if next_tag == "th":
+                break
+    return None
+
+
+def normalize_cell_text(value: str) -> str:
+    return " ".join(value.split())
+
 
 __all__ = [
     "DEFAULT_LENGTH",
@@ -268,4 +375,5 @@ __all__ = [
     "DataTablesRequestBuilder",
     "DataTablesRowMapper",
     "DataTablesRowsExtractor",
+    "extract_detail_cell_text",
 ]

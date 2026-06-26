@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 
 import pytest
@@ -9,10 +10,12 @@ from feed_collector.adapter.outbound.datatables import (
     DEFAULT_LENGTH,
     DataTablesAdapter,
     DataTablesAdapterError,
+    DataTablesHttpClient,
     DataTablesOrderingValidator,
     DataTablesRequestBuilder,
     DataTablesRowMapper,
     DataTablesRowsExtractor,
+    extract_detail_cell_text,
 )
 from feed_collector.domain import EmptyResultPolicy, ParamValue, SourceConfig
 
@@ -125,6 +128,52 @@ def test_map_row_allows_sources_without_published_field_when_ordering_field_exis
         ],
         cfg,
     )
+
+
+def test_extract_detail_cell_text_reads_reply_date() -> None:
+    html = """
+    <table>
+      <tr><th scope="row">등록자</th><td>관리자</td></tr>
+      <tr><th scope="row">회신일</th><td>2026-06-08</td></tr>
+    </table>
+    """
+
+    assert extract_detail_cell_text(html, "회신일") == "2026-06-08"
+
+
+def test_adapter_enriches_published_from_detail_page() -> None:
+    class FakeResponse:
+        text = """
+        <table>
+          <tr><th scope="row">회신일</th><td>2026-06-08</td></tr>
+        </table>
+        """
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> object:
+            raise AssertionError("detail enrichment should not parse JSON")
+
+    class FakeSession:
+        def get(self, url: str, *, timeout: int) -> FakeResponse:
+            assert url == "https://example.test/lawreq/123"
+            assert timeout == 20
+            return FakeResponse()
+
+        def post(self, url: str, *, data: Mapping[str, ParamValue], timeout: int) -> FakeResponse:
+            del url, data, timeout
+            raise AssertionError("detail enrichment should not POST")
+
+    cfg = make_source(
+        params={"published_field": None, "ordering_field": "lawreqNumber", "published_detail_label": "회신일"}
+    )
+    item = DataTablesRowMapper().map({"lawreqIdx": 123, "title": "No date", "lawreqNumber": "260100"}, cfg)
+
+    enriched = DataTablesAdapter(cfg, http_client=DataTablesHttpClient(session=FakeSession())).enrich_items([item])[0]
+
+    assert enriched.published is not None
+    assert enriched.published == datetime(2026, 6, 8, 0, 0, tzinfo=enriched.published.tzinfo)
 
 
 def test_map_row_converts_aware_reg_dt_to_kst() -> None:

@@ -22,6 +22,23 @@ class FakeAdapter:
 
 
 @dataclass
+class FakeEnrichingAdapter(FakeAdapter):
+    enriched: list[str] = field(default_factory=list)
+
+    def enrich_items(self, items: Sequence[Item]) -> list[Item]:
+        self.enriched.extend(item.item_id for item in items)
+        return [
+            Item(
+                item_id=item.item_id,
+                title=item.title,
+                link=item.link,
+                published=item.published or datetime(2026, 1, 3, tzinfo=timezone.utc),
+            )
+            for item in items
+        ]
+
+
+@dataclass
 class FakeState:
     first_run: bool = False
     seen: set[str] = field(default_factory=set)
@@ -98,8 +115,9 @@ def make_service(
     state: FakeState,
     notifier: FakeNotifier | None = None,
     audit: FakeAudit | None = None,
+    adapter: FakeAdapter | None = None,
 ) -> PollService:
-    return PollService(make_source(), FakeAdapter(items), state, state, notifier or FakeNotifier(), audit or FakeAudit())
+    return PollService(make_source(), adapter or FakeAdapter(items), state, state, notifier or FakeNotifier(), audit or FakeAudit())
 
 
 def test_poll_first_run_stores_baseline_without_sending() -> None:
@@ -193,6 +211,18 @@ def test_dedup_filters_seen_and_batch_duplicates() -> None:
     result = make_service(items, state).poll(dry_run=True)
 
     assert [item.item_id for item in result.new_items] == ["fresh"]
+
+
+def test_poll_enriches_only_new_items_before_sending() -> None:
+    state = FakeState(seen={"seen"})
+    adapter = FakeEnrichingAdapter([make_item("seen"), make_item("fresh")])
+    notifier = FakeNotifier()
+
+    result = make_service([], state, notifier, adapter=adapter).poll()
+
+    assert adapter.enriched == ["fresh"]
+    assert result.sent_items[0].published == datetime(2026, 1, 3, tzinfo=timezone.utc)
+    assert notifier.sent[0][1].published == datetime(2026, 1, 3, tzinfo=timezone.utc)
 
 
 def test_dedup_uses_stable_content_hash_for_missing_item_id() -> None:
