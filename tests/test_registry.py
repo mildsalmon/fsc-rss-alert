@@ -58,15 +58,24 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
     assert isinstance(lawreq_adapter, DataTablesAdapter)
 
 
-def test_default_lawreq_detail_url_keeps_menu_params() -> None:
+def test_default_better_fsc_detail_urls_keep_menu_params() -> None:
     sources = {source.id: source for source in load_sources(Path("sources.yaml"))}
 
     lawreq = sources["lawreq"]
+    opinion = sources["opinion"]
 
     assert (
         lawreq.detail_url
         == "https://better.fsc.go.kr/fsc_new/replyCase/LawreqDetail.do?stNo=11&muNo=85&muGpNo=75&lawreqIdx={id}"
     )
+    assert lawreq.params["published_detail_label"] == "회신일"
+    assert (
+        opinion.detail_url
+        == "https://better.fsc.go.kr/fsc_new/replyCase/OpinionDetail.do?stNo=11&muNo=84&muGpNo=75&opinionIdx={id}"
+    )
+    assert opinion.params["item_id_field"] == "opinionIdx"
+    assert opinion.params["ordering_field"] == "opinionNumber"
+    assert opinion.params["published_detail_label"] == "회신일"
 
 
 def test_load_sources_rejects_bad_source_shape(tmp_path: Path) -> None:
