@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from feed_collector.adapter.outbound import DataTablesAdapter, MofaCookieGateFetcher, RssAdapter
+from feed_collector.adapter.outbound import DataTablesAdapter, HtmlScrapeAdapter, MofaCookieGateFetcher, RssAdapter
 from feed_collector.errors import PollError
 from feed_collector.registry import SourceAdapterRegistry, load_sources
 
@@ -42,20 +42,36 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
             published_field: regDt
           list_path: data
           detail_url: https://example.test/lawreq/{id}
+        - id: fss
+          slug: fss-press
+          name: FSS press
+          mechanism: html
+          parser_version: 1
+          channel_id:
+          interval_minutes: 30
+          url: https://example.test/fss/list.do
+          params:
+            item_id_query_param: nttId
+            link_href_contains: view.do
+            title_cell_index: 1
+            date_cell_index: 3
+          empty_result_policy: error
         """,
         encoding="utf-8",
     )
 
-    mofa, lawreq = load_sources(sources_file)
+    mofa, lawreq, fss = load_sources(sources_file)
     registry = SourceAdapterRegistry()
 
     mofa_adapter = registry.create(mofa)
     lawreq_adapter = registry.create(lawreq)
+    fss_adapter = registry.create(fss)
 
     assert mofa.params["fetch_profile"] == "mofa_cookie_gate"
     assert isinstance(mofa_adapter, RssAdapter)
     assert isinstance(mofa_adapter.fetcher, MofaCookieGateFetcher)
     assert isinstance(lawreq_adapter, DataTablesAdapter)
+    assert isinstance(fss_adapter, HtmlScrapeAdapter)
 
 
 def test_default_better_fsc_detail_urls_keep_menu_params() -> None:
@@ -76,6 +92,18 @@ def test_default_better_fsc_detail_urls_keep_menu_params() -> None:
     assert opinion.params["item_id_field"] == "opinionIdx"
     assert opinion.params["ordering_field"] == "opinionNumber"
     assert opinion.params["published_detail_label"] == "회신일"
+
+
+def test_default_fss_source_uses_html_scrape_config() -> None:
+    sources = {source.id: source for source in load_sources(Path("sources.yaml"))}
+
+    fss = sources["fss"]
+
+    assert fss.mechanism == "html"
+    assert fss.url == "https://www.fss.or.kr/fss/bbs/B0000188/list.do?menuNo=200218"
+    assert fss.params["item_id_query_param"] == "nttId"
+    assert fss.params["link_href_contains"] == "/fss/bbs/B0000188/view.do"
+    assert fss.params["date_cell_index"] == 3
 
 
 def test_load_sources_rejects_bad_source_shape(tmp_path: Path) -> None:

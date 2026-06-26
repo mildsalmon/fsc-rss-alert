@@ -14,6 +14,16 @@ from feed_collector.adapter.outbound.http_fetch import (
     HttpFetcherFactory,
     MofaCookieGateFetcher,
 )
+from feed_collector.adapter.outbound.html_scrape import (
+    HtmlCell,
+    HtmlLink,
+    HtmlRow,
+    HtmlRowMapper,
+    HtmlScrapeAdapter,
+    HtmlScrapeAdapterError,
+    HtmlScrapeAdapterFactory,
+    parse_html_rows,
+)
 from feed_collector.adapter.outbound.poll_lock import try_acquire_poll_lock
 from feed_collector.adapter.outbound.rss import RssAdapter, RssAdapterFactory
 from feed_collector.adapter.outbound.slack_bot import (
@@ -36,6 +46,13 @@ __all__ = [
     "DataTablesRowMapper",
     "DataTablesRowsExtractor",
     "DefaultHttpFetcher",
+    "HtmlCell",
+    "HtmlLink",
+    "HtmlRow",
+    "HtmlRowMapper",
+    "HtmlScrapeAdapter",
+    "HtmlScrapeAdapterError",
+    "HtmlScrapeAdapterFactory",
     "HttpClient",
     "HttpFetcherFactory",
     "MofaCookieGateFetcher",
@@ -50,5 +67,6 @@ __all__ = [
     "SqliteStateRepo",
     "feed_channel_name",
     "format_slack_item_message",
+    "parse_html_rows",
     "try_acquire_poll_lock",
 ]

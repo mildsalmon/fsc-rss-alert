@@ -49,3 +49,18 @@
   list_path: data
   detail_url: https://better.fsc.go.kr/fsc_new/replyCase/OpinionDetail.do?stNo=11&muNo=84&muGpNo=75&opinionIdx={id}
   empty_result_policy: error
+
+- id: fss
+  slug: fss-press
+  name: 금감원 보도자료
+  mechanism: html
+  parser_version: 1
+  channel_id:
+  interval_minutes: 30
+  url: https://www.fss.or.kr/fss/bbs/B0000188/list.do?menuNo=200218
+  params:
+    item_id_query_param: nttId
+    link_href_contains: /fss/bbs/B0000188/view.do
+    title_cell_index: 1
+    date_cell_index: 3
+  empty_result_policy: error
