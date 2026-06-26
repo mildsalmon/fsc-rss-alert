@@ -8,6 +8,7 @@ from typing import Any, cast
 import yaml
 
 from feed_collector.adapter.outbound.datatables import DataTablesAdapter
+from feed_collector.adapter.outbound.html_scrape import HtmlScrapeAdapterFactory
 from feed_collector.adapter.outbound.http_fetch import HttpFetcherFactory
 from feed_collector.adapter.outbound.rss import RssAdapterFactory
 from feed_collector.application.port.output.source import SourcePort
@@ -28,12 +29,15 @@ def load_sources(path: str | Path) -> list[SourceConfig]:
 class SourceAdapterRegistry:
     rss_factory: RssAdapterFactory = field(default_factory=lambda: RssAdapterFactory(HttpFetcherFactory()))
     datatables_factory: SourceAdapterFactory = DataTablesAdapter
+    html_factory: HtmlScrapeAdapterFactory = field(default_factory=lambda: HtmlScrapeAdapterFactory(HttpFetcherFactory()))
 
     def create(self, source: SourceConfig) -> SourcePort:
         if source.mechanism == "rss":
             return self.rss_factory.create(source)
         if source.mechanism == "datatables":
             return self.datatables_factory(source)
+        if source.mechanism == "html":
+            return self.html_factory.create(source)
         raise PollError(f"Source {source.id} has unsupported mechanism {source.mechanism!r}")
 
     def __call__(self, source: SourceConfig) -> SourcePort:
