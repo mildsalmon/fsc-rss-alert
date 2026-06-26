@@ -51,6 +51,7 @@ IMMEDIATE_FAILURE_REASONS = frozenset(
 )
 OPS_CHANNEL_STATE_ID = "feed-ops"
 OPS_CHANNEL_SLUG = "ops"
+OPS_CHANNEL_DISPLAY_NAME = "Feed Collector Ops"
 
 
 @dataclass(frozen=True)
@@ -65,15 +66,30 @@ class SourceChannelResolver(ChannelResolverPort):
 
         stored_channel_id = self.channel_repo.get_channel_id(source_id)
         if stored_channel_id:
+            self._update_metadata(stored_channel_id)
             return stored_channel_id
         if self.source.channel_id:
+            self._update_metadata(self.source.channel_id)
             return self.source.channel_id
         if self.channel_provisioner is None:
             return None
 
-        channel_id = self.channel_provisioner.ensure_feed_channel(self.source.slug)
+        channel_id = self.channel_provisioner.ensure_feed_channel(
+            self.source.slug,
+            display_name=self.source.name,
+            source_url=self.source.url,
+        )
         self.channel_repo.set_channel_id(source_id, channel_id)
         return channel_id
+
+    def _update_metadata(self, channel_id: str) -> None:
+        if self.channel_provisioner is None:
+            return
+        self.channel_provisioner.update_feed_channel_metadata(
+            channel_id,
+            display_name=self.source.name,
+            source_url=self.source.url,
+        )
 
 
 @dataclass
@@ -192,10 +208,18 @@ class PollRunner:
     def _ops_channel_id(self) -> str:
         channel_id = self.channel_repo.get_channel_id(OPS_CHANNEL_STATE_ID)
         if channel_id:
+            if self.channel_provisioner is not None:
+                self.channel_provisioner.update_feed_channel_metadata(
+                    channel_id,
+                    display_name=OPS_CHANNEL_DISPLAY_NAME,
+                )
             return channel_id
         if self.channel_provisioner is None:
             raise PollError("feed-ops channel provisioner is not configured")
-        channel_id = self.channel_provisioner.ensure_feed_channel(OPS_CHANNEL_SLUG)
+        channel_id = self.channel_provisioner.ensure_feed_channel(
+            OPS_CHANNEL_SLUG,
+            display_name=OPS_CHANNEL_DISPLAY_NAME,
+        )
         self.channel_repo.set_channel_id(OPS_CHANNEL_STATE_ID, channel_id)
         return channel_id
 
@@ -539,8 +563,15 @@ def ensure_ops_channel_id(
 ) -> str:
     channel_id = channel_repo.get_channel_id(OPS_CHANNEL_STATE_ID)
     if channel_id:
+        channel_provisioner.update_feed_channel_metadata(
+            channel_id,
+            display_name=OPS_CHANNEL_DISPLAY_NAME,
+        )
         return channel_id
-    channel_id = channel_provisioner.ensure_feed_channel(OPS_CHANNEL_SLUG)
+    channel_id = channel_provisioner.ensure_feed_channel(
+        OPS_CHANNEL_SLUG,
+        display_name=OPS_CHANNEL_DISPLAY_NAME,
+    )
     channel_repo.set_channel_id(OPS_CHANNEL_STATE_ID, channel_id)
     return channel_id
 

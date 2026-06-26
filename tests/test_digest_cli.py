@@ -27,12 +27,28 @@ class FakeSlackChannelManager:
 
     def __init__(self, **kwargs: object) -> None:
         del kwargs
-        self.requested: list[str] = []
+        self.requested: list[tuple[str, str | None, str | None]] = []
+        self.metadata_updates: list[tuple[str, str | None, str | None]] = []
         self.__class__.instances.append(self)
 
-    def ensure_feed_channel(self, slug: str) -> str:
-        self.requested.append(slug)
+    def ensure_feed_channel(
+        self,
+        slug: str,
+        *,
+        display_name: str | None = None,
+        source_url: str | None = None,
+    ) -> str:
+        self.requested.append((slug, display_name, source_url))
         return "COPS"
+
+    def update_feed_channel_metadata(
+        self,
+        channel_id: str,
+        *,
+        display_name: str | None = None,
+        source_url: str | None = None,
+    ) -> None:
+        self.metadata_updates.append((channel_id, display_name, source_url))
 
 
 def make_item(item_id: str) -> Item:
@@ -109,7 +125,7 @@ def test_digest_cli_sends_one_feed_ops_message_and_prunes_old_audit(
 
     assert cli.run_digest(args) == 0
 
-    assert FakeSlackChannelManager.instances[0].requested == ["ops"]
+    assert FakeSlackChannelManager.instances[0].requested == [("ops", "Feed Collector Ops", None)]
     assert FakeSlackBotNotifier.instances[0].sent_texts[0][0] == "COPS"
     assert "Feed collector daily digest" in FakeSlackBotNotifier.instances[0].sent_texts[0][1]
     with sqlite3.connect(db_path) as conn:

@@ -12,6 +12,8 @@ from feed_collector.adapter.outbound import (
     SlackBotNotifier,
     SlackChannelManager,
     feed_channel_name,
+    format_feed_channel_purpose,
+    format_feed_channel_topic,
     format_slack_item_message,
 )
 from feed_collector.application.port.output import ChannelProvisionerPort
@@ -161,7 +163,11 @@ def test_slack_bot_notifier_retries_http_429_once() -> None:
 
 def test_slack_channel_manager_reuses_existing_channel_on_name_taken() -> None:
     session = FakeSlackSession(
-        post_responses=[FakeResponse({"ok": False, "error": "name_taken"})],
+        post_responses=[
+            FakeResponse({"ok": False, "error": "name_taken"}),
+            FakeResponse({"ok": True}),
+            FakeResponse({"ok": True}),
+        ],
         get_responses=[
             FakeResponse(
                 {
@@ -180,6 +186,10 @@ def test_slack_channel_manager_reuses_existing_channel_on_name_taken() -> None:
     assert channel_id == "CFEED"
     assert session.posts[0]["url"] == "https://slack.com/api/conversations.create"
     assert session.posts[0]["json"] == {"name": "feed-feed-ops"}
+    assert session.posts[1]["url"] == "https://slack.com/api/conversations.setPurpose"
+    assert session.posts[1]["json"] == {"channel": "CFEED", "purpose": "Feed Collector channel: feed ops."}
+    assert session.posts[2]["url"] == "https://slack.com/api/conversations.setTopic"
+    assert session.posts[2]["json"] == {"channel": "CFEED", "topic": "feed ops"}
     assert session.gets[0]["url"] == "https://slack.com/api/conversations.list"
     assert session.gets[0]["params"]["types"] == "public_channel"
 
@@ -189,6 +199,8 @@ def test_slack_channel_manager_joins_existing_public_channel_on_name_taken() -> 
         post_responses=[
             FakeResponse({"ok": False, "error": "name_taken"}),
             FakeResponse({"ok": True, "channel": {"id": "CFEED"}}),
+            FakeResponse({"ok": True}),
+            FakeResponse({"ok": True}),
         ],
         get_responses=[
             FakeResponse(
@@ -206,6 +218,8 @@ def test_slack_channel_manager_joins_existing_public_channel_on_name_taken() -> 
     assert session.gets[0]["params"]["types"] == "public_channel"
     assert session.posts[1]["url"] == "https://slack.com/api/conversations.join"
     assert session.posts[1]["json"] == {"channel": "CFEED"}
+    assert session.posts[2]["url"] == "https://slack.com/api/conversations.setPurpose"
+    assert session.posts[3]["url"] == "https://slack.com/api/conversations.setTopic"
 
 
 def test_slack_channel_manager_rejects_existing_private_channel_when_not_member() -> None:
@@ -230,11 +244,76 @@ def test_slack_channel_manager_rejects_existing_private_channel_when_not_member(
 
 
 def test_slack_channel_manager_creates_feed_channel() -> None:
-    session = FakeSlackSession([FakeResponse({"ok": True, "channel": {"id": "CNEW"}})])
+    session = FakeSlackSession(
+        [
+            FakeResponse({"ok": True, "channel": {"id": "CNEW"}}),
+            FakeResponse({"ok": True}),
+            FakeResponse({"ok": True}),
+        ]
+    )
     manager = SlackChannelManager(bot_token="xoxb-test", session=session)
 
     assert manager.ensure_feed_channel("FSC notices") == "CNEW"
     assert session.posts[0]["json"] == {"name": "feed-fsc-notices"}
+    assert session.posts[1]["json"] == {"channel": "CNEW", "purpose": "Feed Collector channel: FSC notices."}
+    assert session.posts[2]["json"] == {"channel": "CNEW", "topic": "FSC notices"}
+
+
+def test_slack_channel_manager_sets_source_metadata() -> None:
+    session = FakeSlackSession(
+        [
+            FakeResponse({"ok": True, "channel": {"id": "CNEW"}}),
+            FakeResponse({"ok": True}),
+            FakeResponse({"ok": True}),
+        ]
+    )
+    manager = SlackChannelManager(bot_token="xoxb-test", session=session)
+
+    assert (
+        manager.ensure_feed_channel(
+            "fsc-lawreq",
+            display_name="FSC law requests",
+            source_url="https://better.fsc.go.kr/fsc_new/replyCase/selectReplyCaseLawreqList.do",
+        )
+        == "CNEW"
+    )
+
+    assert session.posts[1]["json"] == {
+        "channel": "CNEW",
+        "purpose": "Feed Collector source: FSC law requests. Base URL: "
+        "https://better.fsc.go.kr/fsc_new/replyCase/selectReplyCaseLawreqList.do",
+    }
+    assert session.posts[2]["json"] == {
+        "channel": "CNEW",
+        "topic": "FSC law requests | https://better.fsc.go.kr/fsc_new/replyCase/selectReplyCaseLawreqList.do",
+    }
+
+
+def test_slack_channel_metadata_update_is_best_effort_for_scope_errors() -> None:
+    session = FakeSlackSession(
+        [
+            FakeResponse({"ok": False, "error": "missing_scope"}),
+            FakeResponse({"ok": False, "error": "missing_scope"}),
+        ]
+    )
+    manager = SlackChannelManager(bot_token="xoxb-test", session=session)
+
+    manager.update_feed_channel_metadata("CFEED", display_name="FSC")
+
+    assert [post["url"] for post in session.posts] == [
+        "https://slack.com/api/conversations.setPurpose",
+        "https://slack.com/api/conversations.setTopic",
+    ]
+
+
+def test_feed_channel_metadata_formatters_trim_to_slack_limit() -> None:
+    purpose = format_feed_channel_purpose(display_name="A" * 260, source_url="https://example.test/source")
+    topic = format_feed_channel_topic(display_name="A" * 260, source_url="https://example.test/source")
+
+    assert len(purpose) == 250
+    assert purpose.endswith("...")
+    assert len(topic) == 250
+    assert topic.endswith("...")
 
 
 def test_feed_channel_name_is_deterministic() -> None:

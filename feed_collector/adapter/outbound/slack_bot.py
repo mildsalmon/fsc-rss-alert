@@ -15,6 +15,14 @@ from feed_collector.domain import Item
 
 
 SLACK_API_BASE_URL = "https://slack.com/api"
+SLACK_CHANNEL_METADATA_LIMIT = 250
+SLACK_CHANNEL_METADATA_ALLOWED_ERRORS = (
+    "missing_scope",
+    "method_not_supported_for_channel_type",
+    "no_permission",
+    "not_in_channel",
+    "user_is_restricted",
+)
 
 
 class SlackApiError(RuntimeError):
@@ -205,20 +213,51 @@ class SlackChannelManager(ChannelProvisionerPort):
             retry_sleep=retry_sleep,
         )
 
-    def ensure_feed_channel(self, slug: str) -> str:
+    def ensure_feed_channel(
+        self,
+        slug: str,
+        *,
+        display_name: str | None = None,
+        source_url: str | None = None,
+    ) -> str:
         name = feed_channel_name(slug)
         data = self.api.post("conversations.create", {"name": name}, allowed_errors=("name_taken",))
         channel_id = _channel_id_from_data(data)
         if channel_id is not None:
+            self.update_feed_channel_metadata(channel_id, display_name=display_name or slug, source_url=source_url)
             return channel_id
 
         if data.get("error") == "name_taken":
             existing = self.find_channel_by_name(name)
             if existing is not None:
-                return self._ensure_can_post(existing)
+                channel_id = self._ensure_can_post(existing)
+                self.update_feed_channel_metadata(channel_id, display_name=display_name or slug, source_url=source_url)
+                return channel_id
 
         error = data.get("error", "unknown_error")
         raise SlackApiError(f"Slack conversations.create failed: {error}")
+
+    def update_feed_channel_metadata(
+        self,
+        channel_id: str,
+        *,
+        display_name: str | None = None,
+        source_url: str | None = None,
+    ) -> None:
+        purpose = format_feed_channel_purpose(display_name=display_name, source_url=source_url)
+        topic = format_feed_channel_topic(display_name=display_name, source_url=source_url)
+        for method, payload_key, text in (
+            ("conversations.setPurpose", "purpose", purpose),
+            ("conversations.setTopic", "topic", topic),
+        ):
+            try:
+                self.api.post(
+                    method,
+                    {"channel": channel_id, payload_key: text},
+                    allowed_errors=SLACK_CHANNEL_METADATA_ALLOWED_ERRORS,
+                )
+            except Exception:  # noqa: BLE001
+                return
 
     def find_channel_by_name(self, name: str) -> Mapping[str, Any] | None:
         cursor = ""
@@ -278,6 +317,33 @@ def feed_channel_name(slug: str) -> str:
         return channel_name
     suffix = hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:8]
     return f"{channel_name[:71]}-{suffix}"
+
+
+def format_feed_channel_purpose(*, display_name: str | None = None, source_url: str | None = None) -> str:
+    name = _metadata_value(display_name, "Feed Collector")
+    if source_url:
+        return _truncate_metadata(f"Feed Collector source: {name}. Base URL: {source_url.strip()}")
+    return _truncate_metadata(f"Feed Collector channel: {name}.")
+
+
+def format_feed_channel_topic(*, display_name: str | None = None, source_url: str | None = None) -> str:
+    name = _metadata_value(display_name, "Feed Collector")
+    if source_url:
+        return _truncate_metadata(f"{name} | {source_url.strip()}")
+    return _truncate_metadata(name)
+
+
+def _metadata_value(value: str | None, fallback: str) -> str:
+    if value is None:
+        return fallback
+    stripped = value.strip()
+    return stripped or fallback
+
+
+def _truncate_metadata(value: str) -> str:
+    if len(value) <= SLACK_CHANNEL_METADATA_LIMIT:
+        return value
+    return f"{value[: SLACK_CHANNEL_METADATA_LIMIT - 3]}..."
 
 
 def _channel_id_from_data(data: Mapping[str, Any]) -> str | None:
