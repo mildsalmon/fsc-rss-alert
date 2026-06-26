@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Protocol, Sequence, runtime_checkable
 
 from feed_collector.application.dto import PollResult
 from feed_collector.application.port.input.poll import PollInputPort
@@ -11,6 +11,11 @@ from feed_collector.application.port.output.seen_state import SeenStatePort
 from feed_collector.application.port.output.source import SourcePort
 from feed_collector.domain import Item, SourceConfig
 from feed_collector.domain.service import oldest_first, unique_items, with_dedup_key
+
+
+@runtime_checkable
+class ItemEnricher(Protocol):
+    def enrich_items(self, items: Sequence[Item]) -> Sequence[Item]: ...
 
 
 class PollService(PollInputPort):
@@ -49,7 +54,7 @@ class PollService(PollInputPort):
                 sent_items=(),
             )
 
-        new_items = oldest_first(self._filter_new_items(items))
+        new_items = oldest_first(self._enrich_new_items(self._filter_new_items(items)))
         if dry_run:
             return PollResult(
                 source_id=self.source.id,
@@ -87,6 +92,11 @@ class PollService(PollInputPort):
             for item in unique_items(self.source.id, items)
             if not self.seen_state.seen_contains(self.source.id, item.item_id)
         ]
+
+    def _enrich_new_items(self, items: Sequence[Item]) -> list[Item]:
+        if not isinstance(self.adapter, ItemEnricher):
+            return list(items)
+        return list(self.adapter.enrich_items(items))
 
     def _resolve_channel_id(self) -> str:
         channel_id = self.channel_resolver.get_channel_id(self.source.id) or self.source.channel_id
