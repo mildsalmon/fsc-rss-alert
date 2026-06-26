@@ -181,6 +181,7 @@ def test_slack_channel_manager_reuses_existing_channel_on_name_taken() -> None:
     assert session.posts[0]["url"] == "https://slack.com/api/conversations.create"
     assert session.posts[0]["json"] == {"name": "feed-feed-ops"}
     assert session.gets[0]["url"] == "https://slack.com/api/conversations.list"
+    assert session.gets[0]["params"]["types"] == "public_channel"
 
 
 def test_slack_channel_manager_joins_existing_public_channel_on_name_taken() -> None:
@@ -202,6 +203,7 @@ def test_slack_channel_manager_joins_existing_public_channel_on_name_taken() -> 
     manager = SlackChannelManager(bot_token="xoxb-test", session=session)
 
     assert manager.ensure_feed_channel("feed ops") == "CFEED"
+    assert session.gets[0]["params"]["types"] == "public_channel"
     assert session.posts[1]["url"] == "https://slack.com/api/conversations.join"
     assert session.posts[1]["json"] == {"channel": "CFEED"}
 
