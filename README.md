@@ -25,7 +25,7 @@ uv run python -m feed_collector poll --dry-run
 uv run python -m feed_collector poll --dry-run --source mofa
 ```
 
-실제 실행은 Slack bot token을 환경변수로 설정한 뒤 실행합니다. 채널 ID가 비어 있는 소스는 봇이 `feed-{slug}` 채널을 만들거나 재사용합니다.
+실제 실행은 Slack bot token을 환경변수로 설정한 뒤 실행합니다. 채널 ID가 비어 있는 소스는 봇이 `feed-{slug}` 채널을 만들거나 재사용하고, 채널 설명/토픽에 소스명과 수집 URL을 남깁니다.
 
 ```bash
 SLACK_BOT_TOKEN="xoxb-..." uv run python -m feed_collector poll
@@ -109,7 +109,7 @@ launchctl bootout "gui/$(id -u)" ~/Library/LaunchAgents/com.mildsalmon.feed-coll
 ## 설정값
 
 - `FAILURE_ALERT_THRESHOLD`: 연속 실패 자가 알림 임계값, 기본값 `3`
-- `SLACK_BOT_TOKEN`: Slack Web API bot token
+- `SLACK_BOT_TOKEN`: Slack Web API bot token. `chat:write`, `channels:manage`, `channels:read` 권한이 필요합니다.
 - `SLACK_TIMEOUT_SECONDS`: Slack API timeout, 기본값 `20`
 - `DIGEST_STALE_MULTIPLIER`: digest stale source 판정 배수, 기본값 `3`
 - `FETCH_TIMEOUT_SECONDS`: RSS 및 알림 HTTP 요청 timeout, 기본값 `20`

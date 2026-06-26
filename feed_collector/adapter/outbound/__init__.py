@@ -46,6 +46,8 @@ from feed_collector.adapter.outbound.slack_bot import (
     SlackBotNotifier,
     SlackChannelManager,
     feed_channel_name,
+    format_feed_channel_purpose,
+    format_feed_channel_topic,
     format_slack_item_message,
 )
 from feed_collector.adapter.outbound.sqlite_audit import SqliteAuditLog
@@ -91,6 +93,8 @@ __all__ = [
     "SqliteSourceStateRepo",
     "SqliteStateRepo",
     "feed_channel_name",
+    "format_feed_channel_purpose",
+    "format_feed_channel_topic",
     "format_slack_item_message",
     "parse_sdn_items",
     "parse_html_rows",

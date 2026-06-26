@@ -39,11 +39,27 @@ class FakeNotifier:
 @dataclass
 class FakeProvisioner:
     channels: dict[str, str] = field(default_factory=lambda: {"ops": "COPS", "source": "CSOURCE"})
-    requested: list[str] = field(default_factory=list)
+    requested: list[tuple[str, str | None, str | None]] = field(default_factory=list)
+    metadata_updates: list[tuple[str, str | None, str | None]] = field(default_factory=list)
 
-    def ensure_feed_channel(self, slug: str) -> str:
-        self.requested.append(slug)
+    def ensure_feed_channel(
+        self,
+        slug: str,
+        *,
+        display_name: str | None = None,
+        source_url: str | None = None,
+    ) -> str:
+        self.requested.append((slug, display_name, source_url))
         return self.channels.get(slug, f"C-{slug}")
+
+    def update_feed_channel_metadata(
+        self,
+        channel_id: str,
+        *,
+        display_name: str | None = None,
+        source_url: str | None = None,
+    ) -> None:
+        self.metadata_updates.append((channel_id, display_name, source_url))
 
 
 def make_source(source_id: str = "mofa", *, interval_minutes: int = 30, channel_id: str | None = "C123") -> SourceConfig:
@@ -189,11 +205,57 @@ def test_poll_runner_records_failure_reason_and_sends_immediate_ops_alert(tmp_pa
         assert state.consecutive_failures == 1
         assert state.last_failure_reason == FetchFailureReason.NOT_FOUND.value
         assert state.failure_alert_sent is True
-        assert provisioner.requested == ["ops"]
+        assert provisioner.requested == [("ops", "Feed Collector Ops", None)]
         assert channel_repo.get_channel_id("feed-ops") == "COPS"
         assert len(notifier.sent) == 1
         assert notifier.sent[0][0] == "COPS"
         assert "NOT_FOUND" in notifier.sent[0][1].title
+    finally:
+        close_repos(seen_state, source_state, channel_repo, audit)
+
+
+def test_poll_runner_passes_source_metadata_to_auto_created_channel(tmp_path: Path) -> None:
+    source = make_source(channel_id=None)
+    adapter = FakeAdapter([make_item("fresh")])
+    notifier = FakeNotifier()
+    provisioner = FakeProvisioner()
+    runner, source_state, seen_state, channel_repo, audit = make_runner(
+        tmp_path,
+        source=source,
+        adapter=adapter,
+        notifier=notifier,
+        provisioner=provisioner,
+    )
+    try:
+        seen_state.mark_seen(source.id, ["old"])
+
+        assert runner.run() == 0
+
+        assert provisioner.requested == [(source.slug, source.name, source.url)]
+        assert channel_repo.get_channel_id(source.id) == f"C-{source.slug}"
+        assert notifier.sent[0][0] == f"C-{source.slug}"
+    finally:
+        close_repos(seen_state, source_state, channel_repo, audit)
+
+
+def test_poll_runner_updates_metadata_for_stored_channel(tmp_path: Path) -> None:
+    source = make_source(channel_id=None)
+    adapter = FakeAdapter([])
+    provisioner = FakeProvisioner()
+    runner, source_state, seen_state, channel_repo, audit = make_runner(
+        tmp_path,
+        source=source,
+        adapter=adapter,
+        provisioner=provisioner,
+    )
+    try:
+        seen_state.mark_seen(source.id, ["old"])
+        channel_repo.set_channel_id(source.id, "CSTORED")
+
+        assert runner.run() == 0
+
+        assert provisioner.requested == []
+        assert provisioner.metadata_updates == [("CSTORED", source.name, source.url)]
     finally:
         close_repos(seen_state, source_state, channel_repo, audit)
 
