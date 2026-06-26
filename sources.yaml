@@ -99,3 +99,17 @@
   list_path: result
   detail_url: https://www.kofiu.go.kr/kor/notification/sanctions_view.do?ntcnYardOrdrNo={id}&seCd=0022
   empty_result_policy: error
+
+- id: ofac-sdn
+  slug: ofac-sdn
+  name: OFAC SDN
+  mechanism: bulk
+  parser_version: 1
+  channel_id:
+  interval_minutes: 30
+  url: https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.XML
+  params:
+    published_timezone: UTC
+    timeout_seconds: 60
+  detail_url: https://sanctionssearch.ofac.treas.gov/Details.aspx?id={id}
+  empty_result_policy: error

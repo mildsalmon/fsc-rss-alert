@@ -1,5 +1,12 @@
 """Outbound adapters that implement application output ports."""
 
+from feed_collector.adapter.outbound.bulk_sdn import (
+    BulkSdnAdapter,
+    BulkSdnAdapterError,
+    BulkSdnAdapterFactory,
+    BulkSdnParser,
+    parse_sdn_items,
+)
 from feed_collector.adapter.outbound.datatables import (
     DataTablesAdapter,
     DataTablesHttpClient,
@@ -47,6 +54,10 @@ from feed_collector.adapter.outbound.sqlite_seen_state import SqliteStateRepo
 from feed_collector.adapter.outbound.sqlite_source_state import SqliteSourceStateRepo
 
 __all__ = [
+    "BulkSdnAdapter",
+    "BulkSdnAdapterError",
+    "BulkSdnAdapterFactory",
+    "BulkSdnParser",
     "DataTablesAdapter",
     "DataTablesHttpClient",
     "DataTablesOrderingValidator",
@@ -81,6 +92,7 @@ __all__ = [
     "SqliteStateRepo",
     "feed_channel_name",
     "format_slack_item_message",
+    "parse_sdn_items",
     "parse_html_rows",
     "try_acquire_poll_lock",
 ]
