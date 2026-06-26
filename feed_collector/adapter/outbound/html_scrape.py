@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from html.parser import HTMLParser
@@ -17,6 +18,8 @@ from feed_collector.domain import Item, SourceConfig
 DEFAULT_PUBLISHED_TIMEZONE = "Asia/Seoul"
 DEFAULT_LINK_HREF_CONTAINS = "view.do"
 DEFAULT_ITEM_ID_QUERY_PARAM = "nttId"
+DEFAULT_ROW_TAG = "tr"
+DEFAULT_CELL_TAG = "td"
 
 
 class HtmlScrapeAdapterError(ValueError):
@@ -38,13 +41,19 @@ class HtmlCell:
 @dataclass(frozen=True)
 class HtmlRow:
     cells: tuple[HtmlCell, ...]
+    text: str = ""
+    links: tuple[HtmlLink, ...] = ()
 
 
-class HtmlTableParser(HTMLParser):
-    def __init__(self) -> None:
+class HtmlRowsParser(HTMLParser):
+    def __init__(self, *, row_tag: str = DEFAULT_ROW_TAG, cell_tag: str = DEFAULT_CELL_TAG) -> None:
         super().__init__(convert_charrefs=True)
+        self.row_tag = row_tag.lower()
+        self.cell_tag = cell_tag.lower()
         self.rows: list[HtmlRow] = []
         self._current_cells: list[HtmlCell] | None = None
+        self._current_row_parts: list[str] = []
+        self._current_row_links: list[HtmlLink] = []
         self._current_cell_parts: list[str] | None = None
         self._current_cell_links: list[HtmlLink] = []
         self._current_link_href: str | None = None
@@ -57,14 +66,16 @@ class HtmlTableParser(HTMLParser):
             return
         if self._skip_depth:
             return
-        if tag == "tr" and self._current_cells is None:
+        if tag == self.row_tag and self._current_cells is None:
             self._current_cells = []
+            self._current_row_parts = []
+            self._current_row_links = []
             return
-        if tag == "td" and self._current_cells is not None and self._current_cell_parts is None:
+        if tag == self.cell_tag and self._current_cells is not None and self._current_cell_parts is None:
             self._current_cell_parts = []
             self._current_cell_links = []
             return
-        if tag == "a" and self._current_cell_parts is not None:
+        if tag == "a" and self._current_cells is not None:
             href = _attr(attrs, "href")
             if href:
                 self._current_link_href = href
@@ -77,16 +88,17 @@ class HtmlTableParser(HTMLParser):
         if self._skip_depth:
             return
         if tag == "a" and self._current_link_href is not None:
-            self._current_cell_links.append(
-                HtmlLink(
-                    href=self._current_link_href,
-                    text=_normalize_text(" ".join(self._current_link_parts)),
-                )
+            link = HtmlLink(
+                href=self._current_link_href,
+                text=_normalize_text(" ".join(self._current_link_parts)),
             )
+            self._current_row_links.append(link)
+            if self._current_cell_parts is not None:
+                self._current_cell_links.append(link)
             self._current_link_href = None
             self._current_link_parts = []
             return
-        if tag == "td" and self._current_cells is not None and self._current_cell_parts is not None:
+        if tag == self.cell_tag and self._current_cells is not None and self._current_cell_parts is not None:
             self._current_cells.append(
                 HtmlCell(
                     text=_normalize_text(" ".join(self._current_cell_parts)),
@@ -96,15 +108,25 @@ class HtmlTableParser(HTMLParser):
             self._current_cell_parts = None
             self._current_cell_links = []
             return
-        if tag == "tr" and self._current_cells is not None:
-            if self._current_cells:
-                self.rows.append(HtmlRow(cells=tuple(self._current_cells)))
+        if tag == self.row_tag and self._current_cells is not None:
+            if self._current_cells or self._current_row_links:
+                self.rows.append(
+                    HtmlRow(
+                        cells=tuple(self._current_cells),
+                        text=_normalize_text(" ".join(self._current_row_parts)),
+                        links=tuple(self._current_row_links),
+                    )
+                )
             self._current_cells = None
+            self._current_row_parts = []
+            self._current_row_links = []
 
     def handle_data(self, data: str) -> None:
-        if self._skip_depth or self._current_cell_parts is None:
+        if self._skip_depth or self._current_cells is None:
             return
-        self._current_cell_parts.append(data)
+        self._current_row_parts.append(data)
+        if self._current_cell_parts is not None:
+            self._current_cell_parts.append(data)
         if self._current_link_href is not None:
             self._current_link_parts.append(data)
 
@@ -127,6 +149,9 @@ class HtmlRowMapper:
 
     def _item_link(self, row: HtmlRow, cfg: SourceConfig) -> HtmlLink | None:
         needle = _str_param(cfg, "link_href_contains", DEFAULT_LINK_HREF_CONTAINS)
+        for link in row.links:
+            if needle in link.href:
+                return link
         for cell in row.cells:
             for link in cell.links:
                 if needle in link.href:
@@ -141,12 +166,7 @@ class HtmlRowMapper:
         return values[0].strip()
 
     def _published(self, row: HtmlRow, cfg: SourceConfig) -> datetime:
-        date_cell_index = _non_negative_int_param(cfg, "date_cell_index")
-        if date_cell_index >= len(row.cells):
-            raise HtmlScrapeAdapterError(
-                f"Source {cfg.id} date_cell_index {date_cell_index} exceeds row width {len(row.cells)}"
-            )
-        raw = row.cells[date_cell_index].text
+        raw = self._published_text(row, cfg)
         if not raw:
             raise HtmlScrapeAdapterError(f"Source {cfg.id} row missing published date")
         try:
@@ -157,6 +177,29 @@ class HtmlRowMapper:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=timezone)
         return parsed.astimezone(timezone)
+
+    def _published_text(self, row: HtmlRow, cfg: SourceConfig) -> str:
+        pattern = _optional_str_param(cfg, "published_regex")
+        if pattern:
+            try:
+                match = re.search(pattern, row.text)
+            except re.error as exc:
+                raise HtmlScrapeAdapterError(f"Source {cfg.id} has invalid published_regex") from exc
+            if match is None:
+                raise HtmlScrapeAdapterError(f"Source {cfg.id} row missing published_regex match")
+            groups = match.groupdict()
+            if "date" in groups:
+                return groups["date"].strip()
+            if match.lastindex:
+                return match.group(1).strip()
+            return match.group(0).strip()
+
+        date_cell_index = _non_negative_int_param(cfg, "date_cell_index")
+        if date_cell_index >= len(row.cells):
+            raise HtmlScrapeAdapterError(
+                f"Source {cfg.id} date_cell_index {date_cell_index} exceeds row width {len(row.cells)}"
+            )
+        return row.cells[date_cell_index].text
 
     def _title_cell_text(self, row: HtmlRow, cfg: SourceConfig) -> str:
         title_cell_index = _non_negative_int_param(cfg, "title_cell_index", default=1)
@@ -173,7 +216,11 @@ class HtmlScrapeAdapter(SourcePort):
 
     def fetch(self) -> list[Item]:
         html = self.fetcher.fetch(self.cfg.url).decode("utf-8", errors="replace")
-        rows = parse_html_rows(html)
+        rows = parse_html_rows(
+            html,
+            row_tag=_str_param(self.cfg, "row_tag", DEFAULT_ROW_TAG),
+            cell_tag=_str_param(self.cfg, "cell_tag", DEFAULT_CELL_TAG),
+        )
         items = [item for row in rows if (item := self.row_mapper.map(row, self.cfg)) is not None]
         if not items and self.cfg.empty_result_policy == "error":
             raise HtmlScrapeAdapterError(f"Source {self.cfg.id} returned no rows")
@@ -191,8 +238,13 @@ class HtmlScrapeAdapterFactory:
         return self.create(source)
 
 
-def parse_html_rows(html: str) -> list[HtmlRow]:
-    parser = HtmlTableParser()
+def parse_html_rows(
+    html: str,
+    *,
+    row_tag: str = DEFAULT_ROW_TAG,
+    cell_tag: str = DEFAULT_CELL_TAG,
+) -> list[HtmlRow]:
+    parser = HtmlRowsParser(row_tag=row_tag, cell_tag=cell_tag)
     parser.feed(html)
     return parser.rows
 
@@ -214,6 +266,15 @@ def _attr(attrs: Sequence[tuple[str, str | None]], name: str) -> str | None:
 
 def _str_param(cfg: SourceConfig, key: str, default: str) -> str:
     value = cfg.params.get(key, default)
+    if not isinstance(value, str) or not value.strip():
+        raise HtmlScrapeAdapterError(f"Source {cfg.id} param {key} must be a non-empty string")
+    return value.strip()
+
+
+def _optional_str_param(cfg: SourceConfig, key: str) -> str | None:
+    value = cfg.params.get(key)
+    if value is None:
+        return None
     if not isinstance(value, str) or not value.strip():
         raise HtmlScrapeAdapterError(f"Source {cfg.id} param {key} must be a non-empty string")
     return value.strip()

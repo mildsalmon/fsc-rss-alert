@@ -56,22 +56,38 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
             title_cell_index: 1
             date_cell_index: 3
           empty_result_policy: error
+        - id: fsc-legislation
+          slug: fsc-legislation
+          name: FSC legislation
+          mechanism: html
+          parser_version: 1
+          channel_id:
+          interval_minutes: 30
+          url: https://www.fsc.go.kr/po040301
+          params:
+            row_tag: li
+            item_id_query_param: noticeId
+            link_href_contains: po040301/view
+            published_regex: (?P<date>\\d{4}-\\d{2}-\\d{2})$
+          empty_result_policy: error
         """,
         encoding="utf-8",
     )
 
-    mofa, lawreq, fss = load_sources(sources_file)
+    mofa, lawreq, fss, fsc_legislation = load_sources(sources_file)
     registry = SourceAdapterRegistry()
 
     mofa_adapter = registry.create(mofa)
     lawreq_adapter = registry.create(lawreq)
     fss_adapter = registry.create(fss)
+    fsc_legislation_adapter = registry.create(fsc_legislation)
 
     assert mofa.params["fetch_profile"] == "mofa_cookie_gate"
     assert isinstance(mofa_adapter, RssAdapter)
     assert isinstance(mofa_adapter.fetcher, MofaCookieGateFetcher)
     assert isinstance(lawreq_adapter, DataTablesAdapter)
     assert isinstance(fss_adapter, HtmlScrapeAdapter)
+    assert isinstance(fsc_legislation_adapter, HtmlScrapeAdapter)
 
 
 def test_default_better_fsc_detail_urls_keep_menu_params() -> None:
@@ -104,6 +120,20 @@ def test_default_fss_source_uses_html_scrape_config() -> None:
     assert fss.params["item_id_query_param"] == "nttId"
     assert fss.params["link_href_contains"] == "/fss/bbs/B0000188/view.do"
     assert fss.params["date_cell_index"] == 3
+
+
+def test_default_fsc_legislation_source_uses_html_scrape_config() -> None:
+    sources = {source.id: source for source in load_sources(Path("sources.yaml"))}
+
+    fsc_legislation = sources["fsc-legislation"]
+
+    assert fsc_legislation.name == "금융위 입법예고/규정변경예고"
+    assert fsc_legislation.slug == "fsc-legislation"
+    assert fsc_legislation.mechanism == "html"
+    assert fsc_legislation.url == "https://www.fsc.go.kr/po040301"
+    assert fsc_legislation.params["row_tag"] == "li"
+    assert fsc_legislation.params["item_id_query_param"] == "noticeId"
+    assert fsc_legislation.params["link_href_contains"] == "po040301/view"
 
 
 def test_load_sources_rejects_bad_source_shape(tmp_path: Path) -> None:
