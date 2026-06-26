@@ -29,3 +29,23 @@
   list_path: data
   detail_url: https://better.fsc.go.kr/fsc_new/replyCase/LawreqDetail.do?stNo=11&muNo=85&muGpNo=75&lawreqIdx={id}
   empty_result_policy: error
+
+- id: opinion
+  slug: fsc-opinion
+  name: 금융위 비조치의견서
+  mechanism: datatables
+  parser_version: 1
+  channel_id:
+  interval_minutes: 30
+  url: https://better.fsc.go.kr/fsc_new/replyCase/selectReplyCaseOpinionList.do
+  params:
+    stNo: 11
+    muNo: 84
+    muGpNo: 75
+    item_id_field: opinionIdx
+    title_field: title
+    ordering_field: opinionNumber
+    published_detail_label: 회신일
+  list_path: data
+  detail_url: https://better.fsc.go.kr/fsc_new/replyCase/OpinionDetail.do?stNo=11&muNo=84&muGpNo=75&opinionIdx={id}
+  empty_result_policy: error
