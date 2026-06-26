@@ -79,3 +79,23 @@
     link_href_contains: po040301/view
     published_regex: (?P<date>\d{4}-\d{2}-\d{2})$
   empty_result_policy: error
+
+- id: fiu-sanctions
+  slug: fiu-sanctions
+  name: FIU 제재공시
+  mechanism: json_board
+  parser_version: 1
+  channel_id:
+  interval_minutes: 30
+  url: https://www.kofiu.go.kr/cmn/board/selectBoardListFile.do
+  params:
+    seCd: "0022"
+    page: 1
+    size: 10
+    item_id_field: ntcnYardOrdrNo
+    title_field: ntcnYardSjNm
+    published_field: ntcnYardRgiDt
+    ordering_field: ntcnYardOrdrNo
+  list_path: result
+  detail_url: https://www.kofiu.go.kr/kor/notification/sanctions_view.do?ntcnYardOrdrNo={id}&seCd=0022
+  empty_result_policy: error

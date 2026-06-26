@@ -10,6 +10,7 @@ import yaml
 from feed_collector.adapter.outbound.datatables import DataTablesAdapter
 from feed_collector.adapter.outbound.html_scrape import HtmlScrapeAdapterFactory
 from feed_collector.adapter.outbound.http_fetch import HttpFetcherFactory
+from feed_collector.adapter.outbound.json_board import JsonBoardAdapter
 from feed_collector.adapter.outbound.rss import RssAdapterFactory
 from feed_collector.application.port.output.source import SourcePort
 from feed_collector.domain import EmptyResultPolicy, Mechanism, ParamValue, SourceConfig
@@ -30,6 +31,7 @@ class SourceAdapterRegistry:
     rss_factory: RssAdapterFactory = field(default_factory=lambda: RssAdapterFactory(HttpFetcherFactory()))
     datatables_factory: SourceAdapterFactory = DataTablesAdapter
     html_factory: HtmlScrapeAdapterFactory = field(default_factory=lambda: HtmlScrapeAdapterFactory(HttpFetcherFactory()))
+    json_board_factory: SourceAdapterFactory = JsonBoardAdapter
 
     def create(self, source: SourceConfig) -> SourcePort:
         if source.mechanism == "rss":
@@ -38,6 +40,8 @@ class SourceAdapterRegistry:
             return self.datatables_factory(source)
         if source.mechanism == "html":
             return self.html_factory.create(source)
+        if source.mechanism == "json_board":
+            return self.json_board_factory(source)
         raise PollError(f"Source {source.id} has unsupported mechanism {source.mechanism!r}")
 
     def __call__(self, source: SourceConfig) -> SourcePort:
