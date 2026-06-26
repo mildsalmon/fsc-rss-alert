@@ -238,7 +238,7 @@ def test_poll_runner_passes_source_metadata_to_auto_created_channel(tmp_path: Pa
         close_repos(seen_state, source_state, channel_repo, audit)
 
 
-def test_poll_runner_updates_metadata_for_stored_channel(tmp_path: Path) -> None:
+def test_poll_runner_does_not_repeat_metadata_update_for_stored_channel(tmp_path: Path) -> None:
     source = make_source(channel_id=None)
     adapter = FakeAdapter([])
     provisioner = FakeProvisioner()
@@ -255,7 +255,7 @@ def test_poll_runner_updates_metadata_for_stored_channel(tmp_path: Path) -> None
         assert runner.run() == 0
 
         assert provisioner.requested == []
-        assert provisioner.metadata_updates == [("CSTORED", source.name, source.url)]
+        assert provisioner.metadata_updates == []
     finally:
         close_repos(seen_state, source_state, channel_repo, audit)
 
