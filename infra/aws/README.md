@@ -10,7 +10,7 @@ This stack runs Feed Collector on one EC2 instance as cron-triggered Docker batc
 - Optional EC2 permission to read one SSM Parameter Store SecureString for `SLACK_BOT_TOKEN`.
 - Security group with outbound access; SSH ingress only when `ssh_ingress_cidr_blocks` is set.
 - Amazon Linux 2023 EC2 instance bootstrapped with Docker, cron, ECR credential helper, and `/opt/feed-collector/run.sh`.
-- EC2 public IPv4 is disabled by default.
+- EC2 public IPv4 is enabled by default for simple outbound egress.
 
 ## State Backend
 
@@ -41,14 +41,14 @@ $EDITOR infra/aws/terraform.tfvars
 ```
 
 Public IPv4 is not required for inbound access because SSH ingress is disabled unless explicitly configured.
-The batch job still needs outbound HTTPS access to pull from ECR, fetch RSS pages, and send Slack messages.
-If the selected subnet does not already have outbound egress through NAT, VPC endpoints plus internet egress, or another route, either provide that egress path or set:
+It is enabled by default because the batch job needs outbound HTTPS access to pull from ECR, fetch RSS pages, and send Slack messages, and the default VPC usually does not include a NAT gateway.
+If the selected subnet already has outbound egress through NAT, VPC endpoints plus internet egress, IPv6 egress, or another route, you can disable public IPv4:
 
 ```hcl
-associate_public_ip_address = true
+associate_public_ip_address = false
 ```
 
-Using public IPv4 is simpler, but it can add fixed hourly IPv4 charges.
+Using public IPv4 is simpler, but it can add fixed hourly IPv4 charges. Inbound access still remains closed unless `ssh_ingress_cidr_blocks` is configured.
 
 Secrets are intentionally not Terraform variables. Use one of these:
 
