@@ -32,6 +32,16 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
             fetch_profile: mofa_cookie_gate
             fetch_retry_delay_seconds: 0
           empty_result_policy: error
+        - id: fsc-press
+          slug: fsc-press-release
+          name: FSC press releases
+          mechanism: rss
+          parser_version: 1
+          channel_id:
+          interval_minutes: 30
+          url: https://www.fsc.go.kr/about/fsc_bbs_rss/?fid=0111
+          display_url: https://www.fsc.go.kr/no010101
+          empty_result_policy: error
         - id: lawreq
           slug: fsc-lawreq
           name: FSC law requests
@@ -113,10 +123,11 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    mofa, lawreq, fss, fsc_legislation, fiu, ofac = load_sources(sources_file)
+    mofa, fsc_press, lawreq, fss, fsc_legislation, fiu, ofac = load_sources(sources_file)
     registry = SourceAdapterRegistry()
 
     mofa_adapter = registry.create(mofa)
+    fsc_press_adapter = registry.create(fsc_press)
     lawreq_adapter = registry.create(lawreq)
     fss_adapter = registry.create(fss)
     fsc_legislation_adapter = registry.create(fsc_legislation)
@@ -126,6 +137,8 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
     assert mofa.params["fetch_profile"] == "mofa_cookie_gate"
     assert isinstance(mofa_adapter, RssAdapter)
     assert isinstance(mofa_adapter.fetcher, MofaCookieGateFetcher)
+    assert fsc_press.display_url == "https://www.fsc.go.kr/no010101"
+    assert isinstance(fsc_press_adapter, RssAdapter)
     assert lawreq.display_url == "https://example.test/lawreq"
     assert isinstance(lawreq_adapter, DataTablesAdapter)
     assert isinstance(fss_adapter, HtmlScrapeAdapter)
@@ -172,6 +185,19 @@ def test_default_fss_source_uses_html_scrape_config() -> None:
     assert fss.params["item_id_query_param"] == "nttId"
     assert fss.params["link_href_contains"] == "/fss/bbs/B0000188/view.do"
     assert fss.params["date_cell_index"] == 3
+
+
+def test_default_fsc_press_source_uses_rss_config() -> None:
+    sources = {source.id: source for source in load_sources(Path("sources.yaml"))}
+
+    fsc_press = sources["fsc-press"]
+
+    assert fsc_press.name == "금융위 보도자료"
+    assert fsc_press.slug == "fsc-press-release"
+    assert fsc_press.mechanism == "rss"
+    assert fsc_press.url == "https://www.fsc.go.kr/about/fsc_bbs_rss/?fid=0111"
+    assert fsc_press.display_url == "https://www.fsc.go.kr/no010101"
+    assert fsc_press.empty_result_policy == "error"
 
 
 def test_default_fsc_legislation_source_uses_html_scrape_config() -> None:

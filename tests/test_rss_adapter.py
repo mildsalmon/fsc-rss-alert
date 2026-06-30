@@ -142,6 +142,30 @@ def test_rss_adapter_uses_link_when_guid_is_missing_through_public_parser() -> N
     assert item.item_id == "https://example.test/link"
 
 
+def test_rss_adapter_parses_fsc_press_release_shape() -> None:
+    feed_bytes = """<?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0">
+      <channel>
+        <title>금융위원회 &gt; 알림마당 &gt; 위원회 소식 &gt; 보도자료</title>
+        <link>https://www.fsc.go.kr/no010101</link>
+        <item>
+          <title><![CDATA[금융위 보도자료 제목]]></title>
+          <link><![CDATA[https://www.fsc.go.kr/no010101/87220]]></link>
+          <date>2026-06-30 00:00:00</date>
+        </item>
+      </channel>
+    </rss>
+    """.encode()
+
+    item = parse_items(feed_bytes, source_id="fsc-press")[0]
+
+    assert item.item_id == "https://www.fsc.go.kr/no010101/87220"
+    assert item.title == "금융위 보도자료 제목"
+    assert item.link == "https://www.fsc.go.kr/no010101/87220"
+    assert item.published is not None
+    assert item.published.year == 2026
+
+
 def test_rss_adapter_normalizes_http_443_links() -> None:
     feed_bytes = b"""<?xml version="1.0" encoding="UTF-8"?>
     <rss version="2.0">

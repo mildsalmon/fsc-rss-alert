@@ -2,7 +2,8 @@
 
 설정된 피드 소스를 주기적으로 확인하고 새 글을 Slack 채널로 보냅니다.
 현재는 `sources.yaml`에 등록된 MOFA 독자제재, 금융위 법령해석, 금융위 비조치의견서,
-금감원 보도자료, 금융위 입법예고/규정변경예고, FIU 제재공시, OFAC 제재목록 업데이트를 폴링합니다.
+금감원 보도자료, 금융위 보도자료, 금융위 입법예고/규정변경예고, FIU 제재공시,
+OFAC 제재목록 업데이트를 폴링합니다.
 첫 실행은 소스별 현재 항목을 기준선으로 저장하고 알림을 보내지 않습니다.
 
 ## 로컬 실행
@@ -23,6 +24,7 @@ uv run python -m feed_collector poll --dry-run
 
 ```bash
 uv run python -m feed_collector poll --dry-run --source mofa
+uv run python -m feed_collector poll --dry-run --source fsc-press
 ```
 
 실제 실행은 Slack bot token을 환경변수로 설정한 뒤 실행합니다. 채널 ID가 비어 있는 소스는 봇이 `feed-{slug}` 채널을 만들거나 재사용하고, 채널 설명/토픽에 소스명과 `display_url`(없으면 수집 URL)을 남깁니다.
