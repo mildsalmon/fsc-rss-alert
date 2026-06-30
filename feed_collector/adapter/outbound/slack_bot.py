@@ -243,7 +243,7 @@ class SlackChannelManager(ChannelProvisionerPort):
         *,
         display_name: str | None = None,
         source_url: str | None = None,
-    ) -> None:
+    ) -> bool:
         purpose = format_feed_channel_purpose(display_name=display_name, source_url=source_url)
         topic = format_feed_channel_topic(display_name=display_name, source_url=source_url)
         for method, payload_key, text in (
@@ -251,13 +251,16 @@ class SlackChannelManager(ChannelProvisionerPort):
             ("conversations.setTopic", "topic", topic),
         ):
             try:
-                self.api.post(
+                data = self.api.post(
                     method,
                     {"channel": channel_id, payload_key: text},
                     allowed_errors=SLACK_CHANNEL_METADATA_ALLOWED_ERRORS,
                 )
             except Exception:  # noqa: BLE001
-                return
+                return False
+            if data.get("ok") is not True:
+                return False
+        return True
 
     def find_channel_by_name(self, name: str) -> Mapping[str, Any] | None:
         cursor = ""
@@ -327,9 +330,8 @@ def format_feed_channel_purpose(*, display_name: str | None = None, source_url: 
 
 
 def format_feed_channel_topic(*, display_name: str | None = None, source_url: str | None = None) -> str:
+    del source_url
     name = _metadata_value(display_name, "Feed Collector")
-    if source_url:
-        return _truncate_metadata(f"{name} | {source_url.strip()}")
     return _truncate_metadata(name)
 
 

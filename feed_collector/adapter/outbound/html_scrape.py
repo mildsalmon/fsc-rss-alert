@@ -46,14 +46,22 @@ class HtmlRow:
 
 
 class HtmlRowsParser(HTMLParser):
-    def __init__(self, *, row_tag: str = DEFAULT_ROW_TAG, cell_tag: str = DEFAULT_CELL_TAG) -> None:
+    def __init__(
+        self,
+        *,
+        row_tag: str = DEFAULT_ROW_TAG,
+        cell_tag: str = DEFAULT_CELL_TAG,
+        row_class_contains: str | None = None,
+    ) -> None:
         super().__init__(convert_charrefs=True)
         self.row_tag = row_tag.lower()
         self.cell_tag = cell_tag.lower()
+        self.row_class_contains = row_class_contains
         self.rows: list[HtmlRow] = []
         self._current_cells: list[HtmlCell] | None = None
         self._current_row_parts: list[str] = []
         self._current_row_links: list[HtmlLink] = []
+        self._row_depth = 0
         self._current_cell_parts: list[str] | None = None
         self._current_cell_links: list[HtmlLink] = []
         self._current_link_href: str | None = None
@@ -66,10 +74,16 @@ class HtmlRowsParser(HTMLParser):
             return
         if self._skip_depth:
             return
-        if tag == self.row_tag and self._current_cells is None:
-            self._current_cells = []
-            self._current_row_parts = []
-            self._current_row_links = []
+        if tag == self.row_tag:
+            if self._current_cells is None:
+                if not _class_contains(attrs, self.row_class_contains):
+                    return
+                self._current_cells = []
+                self._current_row_parts = []
+                self._current_row_links = []
+                self._row_depth = 1
+                return
+            self._row_depth += 1
             return
         if tag == self.cell_tag and self._current_cells is not None and self._current_cell_parts is None:
             self._current_cell_parts = []
@@ -109,6 +123,9 @@ class HtmlRowsParser(HTMLParser):
             self._current_cell_links = []
             return
         if tag == self.row_tag and self._current_cells is not None:
+            self._row_depth -= 1
+            if self._row_depth > 0:
+                return
             if self._current_cells or self._current_row_links:
                 self.rows.append(
                     HtmlRow(
@@ -120,6 +137,7 @@ class HtmlRowsParser(HTMLParser):
             self._current_cells = None
             self._current_row_parts = []
             self._current_row_links = []
+            self._row_depth = 0
 
     def handle_data(self, data: str) -> None:
         if self._skip_depth or self._current_cells is None:
@@ -159,6 +177,21 @@ class HtmlRowMapper:
         return None
 
     def _item_id(self, href: str, cfg: SourceConfig) -> str:
+        pattern = _optional_str_param(cfg, "item_id_regex")
+        if pattern:
+            try:
+                match = re.search(pattern, href)
+            except re.error as exc:
+                raise HtmlScrapeAdapterError(f"Source {cfg.id} has invalid item_id_regex") from exc
+            if match is None:
+                raise HtmlScrapeAdapterError(f"Source {cfg.id} item link missing item_id_regex match: {href}")
+            groups = match.groupdict()
+            if "id" in groups:
+                return groups["id"].strip()
+            if match.lastindex:
+                return match.group(1).strip()
+            return match.group(0).strip()
+
         query_param = _str_param(cfg, "item_id_query_param", DEFAULT_ITEM_ID_QUERY_PARAM)
         values = parse_qs(urlsplit(href).query).get(query_param)
         if not values or not values[0].strip():
@@ -220,6 +253,7 @@ class HtmlScrapeAdapter(SourcePort):
             html,
             row_tag=_str_param(self.cfg, "row_tag", DEFAULT_ROW_TAG),
             cell_tag=_str_param(self.cfg, "cell_tag", DEFAULT_CELL_TAG),
+            row_class_contains=_optional_str_param(self.cfg, "row_class_contains"),
         )
         items = [item for row in rows if (item := self.row_mapper.map(row, self.cfg)) is not None]
         if not items and self.cfg.empty_result_policy == "error":
@@ -243,8 +277,9 @@ def parse_html_rows(
     *,
     row_tag: str = DEFAULT_ROW_TAG,
     cell_tag: str = DEFAULT_CELL_TAG,
+    row_class_contains: str | None = None,
 ) -> list[HtmlRow]:
-    parser = HtmlRowsParser(row_tag=row_tag, cell_tag=cell_tag)
+    parser = HtmlRowsParser(row_tag=row_tag, cell_tag=cell_tag, row_class_contains=row_class_contains)
     parser.feed(html)
     return parser.rows
 
@@ -262,6 +297,13 @@ def _attr(attrs: Sequence[tuple[str, str | None]], name: str) -> str | None:
         if key == name:
             return value
     return None
+
+
+def _class_contains(attrs: Sequence[tuple[str, str | None]], needle: str | None) -> bool:
+    if needle is None:
+        return True
+    value = _attr(attrs, "class")
+    return value is not None and needle in value
 
 
 def _str_param(cfg: SourceConfig, key: str, default: str) -> str:

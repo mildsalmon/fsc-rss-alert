@@ -285,7 +285,7 @@ def test_slack_channel_manager_sets_source_metadata() -> None:
     }
     assert session.posts[2]["json"] == {
         "channel": "CNEW",
-        "topic": "FSC law requests | https://better.fsc.go.kr/fsc_new/replyCase/selectReplyCaseLawreqList.do",
+        "topic": "FSC law requests",
     }
 
 
@@ -298,11 +298,10 @@ def test_slack_channel_metadata_update_is_best_effort_for_scope_errors() -> None
     )
     manager = SlackChannelManager(bot_token="xoxb-test", session=session)
 
-    manager.update_feed_channel_metadata("CFEED", display_name="FSC")
+    assert manager.update_feed_channel_metadata("CFEED", display_name="FSC") is False
 
     assert [post["url"] for post in session.posts] == [
         "https://slack.com/api/conversations.setPurpose",
-        "https://slack.com/api/conversations.setTopic",
     ]
 
 
