@@ -26,3 +26,10 @@ logs/
 # Local sqlite state
 feed.db
 feed.db-*
+
+# Terraform local state/config
+*.tfstate
+*.tfstate.*
+.terraform/
+infra/aws/backend.hcl
+infra/aws/terraform.tfvars

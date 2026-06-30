@@ -1,0 +1,12 @@
+.git
+.github
+.pytest_cache
+.venv
+.env
+*.db
+*.db-*
+logs
+memory
+knowledge
+plans
+state.json
