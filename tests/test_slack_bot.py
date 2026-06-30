@@ -84,16 +84,16 @@ def make_markup_item() -> Item:
 def test_format_slack_item_message_preserves_title_date_link() -> None:
     assert (
         format_slack_item_message(make_item())
-        == "Policy update\nDate: 2026-01-02T03:04:05+00:00\nLink: https://example.test/policy"
+        == "> 제목: *Policy update*\n날짜: 2026-01-02 03:04:05\n링크: https://example.test/policy"
     )
 
 
 def test_format_slack_item_message_escapes_slack_control_chars() -> None:
     assert (
         format_slack_item_message(make_markup_item())
-        == "&lt;@channel&gt; &amp; &lt;policy&gt;\n"
-        "Date: unknown\n"
-        "Link: https://example.test/policy?a=1&amp;b=&lt;x&gt;"
+        == "> 제목: *&lt;@channel&gt; &amp; &lt;policy&gt;*\n"
+        "날짜: unknown\n"
+        "링크: https://example.test/policy?a=1&amp;b=&lt;x&gt;"
     )
 
 
@@ -111,9 +111,9 @@ def test_slack_bot_notifier_posts_chat_message() -> None:
     assert post["timeout"] == 3
     assert post["json"] == {
         "channel": "C123",
-        "text": "Policy update\nDate: 2026-01-02T03:04:05+00:00\nLink: https://example.test/policy",
+        "text": "> 제목: *Policy update*\n날짜: 2026-01-02 03:04:05\n링크: https://example.test/policy",
         "unfurl_links": False,
-        "mrkdwn": False,
+        "mrkdwn": True,
     }
 
 

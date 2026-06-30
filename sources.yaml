@@ -11,6 +11,17 @@
     fetch_profile: mofa_cookie_gate
   empty_result_policy: error
 
+- id: fsc-press
+  slug: fsc-press-release
+  name: 금융위 보도자료
+  mechanism: rss
+  parser_version: 1
+  channel_id:
+  interval_minutes: 30
+  url: https://www.fsc.go.kr/about/fsc_bbs_rss/?fid=0111
+  display_url: https://www.fsc.go.kr/no010101
+  empty_result_policy: error
+
 - id: lawreq
   slug: fsc-lawreq
   name: 금융위 법령해석

@@ -64,9 +64,9 @@ def escape_slack_text(value: str) -> str:
 
 def format_slack_item_message(item: Item) -> str:
     title = escape_slack_text(item.title.strip() or "(untitled)")
-    published = item.published.isoformat() if item.published is not None else "unknown"
+    published = item.published.strftime("%Y-%m-%d %H:%M:%S") if item.published is not None else "unknown"
     link = escape_slack_text(item.link.strip() or "(no link)")
-    return f"{title}\nDate: {published}\nLink: {link}"
+    return f"> 제목: *{title}*\n날짜: {published}\n링크: {link}"
 
 
 class _SlackApi:
@@ -177,16 +177,16 @@ class SlackBotNotifier(NotifierPort):
         )
 
     def send(self, channel_id: str, item: Item) -> str:
-        return self.send_text(channel_id, format_slack_item_message(item))
+        return self.send_text(channel_id, format_slack_item_message(item), mrkdwn=True)
 
-    def send_text(self, channel_id: str, text: str) -> str:
+    def send_text(self, channel_id: str, text: str, *, mrkdwn: bool = False) -> str:
         data = self.api.post(
             "chat.postMessage",
             {
                 "channel": channel_id,
                 "text": text,
                 "unfurl_links": False,
-                "mrkdwn": False,
+                "mrkdwn": mrkdwn,
             },
         )
         ts = data.get("ts")
