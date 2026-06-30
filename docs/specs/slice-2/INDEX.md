@@ -27,8 +27,10 @@
 - EC2 instance role/profile for ECR pull.
 - Optional SSM Parameter Store read permission for Slack token parameter name.
 - Security group with outbound-only default; SSH ingress is opt-in.
+- EC2 public IPv4 is disabled by default; the selected subnet must still provide outbound HTTPS egress for ECR, RSS, and Slack, or `associate_public_ip_address` must be explicitly enabled.
 - EC2 user_data installs Docker/cron/ECR credential helper and registers poll/digest cron.
 - Terraform state uses an S3 backend with native lockfile support, not DynamoDB locking.
+- ECR lifecycle keeps only the latest 3 images to limit repository storage growth.
 
 ## 운영 방식
 

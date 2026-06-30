@@ -7,6 +7,11 @@ github_branch     = "main"
 # Use the default VPC/subnet by default. Set these when deploying into a specific VPC.
 # vpc_id    = "vpc-..."
 # subnet_id = "subnet-..."
+#
+# Public IPv4 is disabled by default to avoid fixed IPv4 charges.
+# The instance still needs outbound HTTPS access for ECR pulls, RSS fetches, and Slack sends.
+# Set this to true only when the selected subnet has no other outbound egress path.
+# associate_public_ip_address = true
 
 instance_type       = "t3.micro"
 root_volume_size_gb = 12

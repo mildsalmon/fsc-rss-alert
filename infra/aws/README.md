@@ -4,12 +4,13 @@ This stack runs Feed Collector on one EC2 instance as cron-triggered Docker batc
 
 ## What Terraform Creates
 
-- Private ECR repository with lifecycle policy.
+- Private ECR repository with lifecycle policy that keeps only the latest 3 images.
 - GitHub Actions OIDC role that can push to the ECR repository.
 - EC2 instance role/profile with ECR read permission.
 - Optional EC2 permission to read one SSM Parameter Store SecureString for `SLACK_BOT_TOKEN`.
 - Security group with outbound access; SSH ingress only when `ssh_ingress_cidr_blocks` is set.
 - Amazon Linux 2023 EC2 instance bootstrapped with Docker, cron, ECR credential helper, and `/opt/feed-collector/run.sh`.
+- EC2 public IPv4 is disabled by default.
 
 ## State Backend
 
@@ -38,6 +39,16 @@ Start from:
 cp infra/aws/terraform.tfvars.example infra/aws/terraform.tfvars
 $EDITOR infra/aws/terraform.tfvars
 ```
+
+Public IPv4 is not required for inbound access because SSH ingress is disabled unless explicitly configured.
+The batch job still needs outbound HTTPS access to pull from ECR, fetch RSS pages, and send Slack messages.
+If the selected subnet does not already have outbound egress through NAT, VPC endpoints plus internet egress, or another route, either provide that egress path or set:
+
+```hcl
+associate_public_ip_address = true
+```
+
+Using public IPv4 is simpler, but it can add fixed hourly IPv4 charges.
 
 Secrets are intentionally not Terraform variables. Use one of these:
 

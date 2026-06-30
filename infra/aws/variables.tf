@@ -58,9 +58,9 @@ variable "subnet_id" {
 }
 
 variable "associate_public_ip_address" {
-  description = "Whether to associate a public IP address with the EC2 instance."
+  description = "Whether to associate a public IPv4 address with the EC2 instance. Keep false when the subnet already has outbound internet through NAT, VPC endpoints, or another egress path."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "instance_type" {
