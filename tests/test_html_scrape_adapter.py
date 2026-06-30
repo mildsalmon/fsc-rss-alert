@@ -67,6 +67,29 @@ FSC_LEGISLATION_HTML = """
 """
 
 
+OFAC_RECENT_ACTIONS_HTML = """
+<html>
+  <body>
+    <div class="view-content">
+      <div class="margin-bottom-4 search-result views-row">
+        <div>
+          <div class="font-sans-lg margin-bottom-05 margin-top-1 text-no-underline">
+            <a href="/recent-actions/20260629" hreflang="en">Russia-related Designations Removals</a>
+          </div>
+        </div>
+        <div>
+          <div class="margin-top-1 font-sans-2xs line-height-sans-3 margin-bottom-1">
+            June 29, 2026 -
+            <a href="/recent-actions/sanctions-list-updates">Sanctions List Updates</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+"""
+
+
 @dataclass
 class FakeFetcher:
     payload: bytes
@@ -125,6 +148,33 @@ def make_fsc_legislation_source(
     )
 
 
+def make_ofac_recent_actions_source(
+    *,
+    params: dict[str, ParamValue] | None = None,
+    empty_result_policy: EmptyResultPolicy = "error",
+) -> SourceConfig:
+    base_params: dict[str, ParamValue] = {
+        "row_tag": "div",
+        "row_class_contains": "views-row",
+        "link_href_contains": "/recent-actions/",
+        "item_id_regex": r"/recent-actions/(?P<id>[^/?#]+)",
+        "published_regex": r"(?P<date>[A-Z][a-z]+ \d{1,2}, \d{4})",
+        "published_timezone": "UTC",
+    }
+    return SourceConfig(
+        id="ofac-sdn",
+        slug="ofac-sdn",
+        name="OFAC Sanctions List Updates",
+        mechanism="html",
+        parser_version=1,
+        channel_id=None,
+        interval_minutes=30,
+        url="https://ofac.treasury.gov/recent-actions/sanctions-list-updates",
+        params=base_params | (params or {}),
+        empty_result_policy=empty_result_policy,
+    )
+
+
 def test_parse_html_rows_collects_cells_and_links() -> None:
     rows = parse_html_rows(FSS_HTML)
 
@@ -164,6 +214,21 @@ def test_html_scrape_adapter_maps_fsc_legislation_list_rows_to_items() -> None:
         == "https://www.fsc.go.kr/po040301/view?noticeId=4153&curPage=&srchKey=&srchText=&srchBeginDt=&srchEndDt="
     )
     assert items[0].published == datetime(2026, 6, 5, tzinfo=ZoneInfo("Asia/Seoul"))
+
+
+def test_html_scrape_adapter_maps_ofac_recent_action_rows_to_items() -> None:
+    adapter = HtmlScrapeAdapter(
+        make_ofac_recent_actions_source(),
+        fetcher=FakeFetcher(OFAC_RECENT_ACTIONS_HTML.encode()),
+    )
+
+    items = adapter.fetch()
+
+    assert len(items) == 1
+    assert items[0].item_id == "20260629"
+    assert items[0].title == "Russia-related Designations Removals"
+    assert items[0].link == "https://ofac.treasury.gov/recent-actions/20260629"
+    assert items[0].published == datetime(2026, 6, 29, tzinfo=ZoneInfo("UTC"))
 
 
 def test_html_scrape_adapter_errors_on_empty_required_source() -> None:

@@ -47,8 +47,9 @@ class FakeSlackChannelManager:
         *,
         display_name: str | None = None,
         source_url: str | None = None,
-    ) -> None:
+    ) -> bool:
         self.metadata_updates.append((channel_id, display_name, source_url))
+        return True
 
 
 def make_item(item_id: str) -> Item:

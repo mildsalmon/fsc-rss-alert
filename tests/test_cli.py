@@ -9,7 +9,7 @@ from typing import Sequence
 from feed_collector.adapter.outbound import SqliteAuditLog, SqliteChannelRepo, SqliteSourceStateRepo, SqliteStateRepo
 from feed_collector.application.port.output import SourceRunState
 from feed_collector import cli
-from feed_collector.cli import PollRunner, failure_alert_item, is_due
+from feed_collector.cli import PollRunner, SourceChannelResolver, channel_metadata_url, failure_alert_item, is_due
 from feed_collector.domain import Item, SourceConfig
 from feed_collector.errors import FetchFailureReason, PollError, infer_from_error
 
@@ -41,6 +41,7 @@ class FakeProvisioner:
     channels: dict[str, str] = field(default_factory=lambda: {"ops": "COPS", "source": "CSOURCE"})
     requested: list[tuple[str, str | None, str | None]] = field(default_factory=list)
     metadata_updates: list[tuple[str, str | None, str | None]] = field(default_factory=list)
+    metadata_update_success: bool = True
 
     def ensure_feed_channel(
         self,
@@ -58,11 +59,18 @@ class FakeProvisioner:
         *,
         display_name: str | None = None,
         source_url: str | None = None,
-    ) -> None:
+    ) -> bool:
         self.metadata_updates.append((channel_id, display_name, source_url))
+        return self.metadata_update_success
 
 
-def make_source(source_id: str = "mofa", *, interval_minutes: int = 30, channel_id: str | None = "C123") -> SourceConfig:
+def make_source(
+    source_id: str = "mofa",
+    *,
+    interval_minutes: int = 30,
+    channel_id: str | None = "C123",
+    display_url: str | None = None,
+) -> SourceConfig:
     return SourceConfig(
         id=source_id,
         slug=f"{source_id}-slug",
@@ -72,6 +80,7 @@ def make_source(source_id: str = "mofa", *, interval_minutes: int = 30, channel_
         channel_id=channel_id,
         interval_minutes=interval_minutes,
         url=f"https://example.test/{source_id}.xml",
+        display_url=display_url,
     )
 
 
@@ -161,6 +170,36 @@ def test_poll_runner_skips_not_due_sources_without_fetching(tmp_path: Path) -> N
         close_repos(seen_state, source_state, channel_repo, audit)
 
 
+def test_poll_runner_refreshes_stored_metadata_before_interval_skip(tmp_path: Path) -> None:
+    now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    source = make_source(display_url="https://example.test/mofa")
+    adapter = FakeAdapter([make_item()])
+    provisioner = FakeProvisioner()
+    runner, source_state, seen_state, channel_repo, audit = make_runner(
+        tmp_path,
+        source=source,
+        adapter=adapter,
+        provisioner=provisioner,
+        now=now,
+    )
+    try:
+        source_state.ensure_source(source)
+        channel_repo.set_channel_id(source.id, "CSTORED")
+        with sqlite3.connect(tmp_path / "feed.db") as conn:
+            conn.execute(
+                "UPDATE sources SET last_attempt_at = ? WHERE id = ?",
+                ((now - timedelta(minutes=5)).isoformat(), source.id),
+            )
+
+        assert runner.run() == 0
+
+        assert adapter.fetch_count == 0
+        assert provisioner.metadata_updates == [("CSTORED", source.name, "https://example.test/mofa")]
+        assert channel_repo.get_channel_metadata(source.id) == (source.name, "https://example.test/mofa", 2)
+    finally:
+        close_repos(seen_state, source_state, channel_repo, audit)
+
+
 def test_dry_run_fetches_candidates_without_writing_state(tmp_path: Path) -> None:
     source = make_source(channel_id=None)
     adapter = FakeAdapter([make_item()])
@@ -215,7 +254,7 @@ def test_poll_runner_records_failure_reason_and_sends_immediate_ops_alert(tmp_pa
 
 
 def test_poll_runner_passes_source_metadata_to_auto_created_channel(tmp_path: Path) -> None:
-    source = make_source(channel_id=None)
+    source = make_source(channel_id=None, display_url="https://example.test/mofa")
     adapter = FakeAdapter([make_item("fresh")])
     notifier = FakeNotifier()
     provisioner = FakeProvisioner()
@@ -231,33 +270,65 @@ def test_poll_runner_passes_source_metadata_to_auto_created_channel(tmp_path: Pa
 
         assert runner.run() == 0
 
-        assert provisioner.requested == [(source.slug, source.name, source.url)]
+        assert provisioner.requested == [(source.slug, source.name, "https://example.test/mofa")]
+        assert provisioner.metadata_updates == []
         assert channel_repo.get_channel_id(source.id) == f"C-{source.slug}"
+        assert channel_repo.get_channel_metadata(source.id) == (None, None, None)
         assert notifier.sent[0][0] == f"C-{source.slug}"
     finally:
         close_repos(seen_state, source_state, channel_repo, audit)
 
 
-def test_poll_runner_does_not_repeat_metadata_update_for_stored_channel(tmp_path: Path) -> None:
-    source = make_source(channel_id=None)
-    adapter = FakeAdapter([])
-    provisioner = FakeProvisioner()
-    runner, source_state, seen_state, channel_repo, audit = make_runner(
-        tmp_path,
-        source=source,
-        adapter=adapter,
-        provisioner=provisioner,
-    )
-    try:
-        seen_state.mark_seen(source.id, ["old"])
-        channel_repo.set_channel_id(source.id, "CSTORED")
+def test_channel_metadata_url_falls_back_to_fetch_url() -> None:
+    source = make_source(display_url=None)
 
-        assert runner.run() == 0
+    assert channel_metadata_url(source) == source.url
+
+
+def test_source_channel_resolver_refreshes_stored_channel_metadata_once(tmp_path: Path) -> None:
+    source = make_source(channel_id=None, display_url="https://example.test/mofa")
+    provisioner = FakeProvisioner()
+    channel_repo = SqliteChannelRepo(tmp_path / "feed.db")
+    try:
+        channel_repo.set_channel_id(source.id, "CSTORED")
+        resolver = SourceChannelResolver(
+            source=source,
+            channel_repo=channel_repo,
+            channel_provisioner=provisioner,
+        )
+
+        assert resolver.get_channel_id(source.id) == "CSTORED"
+        assert resolver.get_channel_id(source.id) == "CSTORED"
 
         assert provisioner.requested == []
-        assert provisioner.metadata_updates == []
+        assert provisioner.metadata_updates == [("CSTORED", source.name, "https://example.test/mofa")]
+        assert channel_repo.get_channel_metadata(source.id) == (source.name, "https://example.test/mofa", 2)
     finally:
-        close_repos(seen_state, source_state, channel_repo, audit)
+        close_repos(channel_repo)
+
+
+def test_source_channel_resolver_retries_metadata_after_failed_update(tmp_path: Path) -> None:
+    source = make_source(channel_id=None, display_url="https://example.test/mofa")
+    provisioner = FakeProvisioner(metadata_update_success=False)
+    channel_repo = SqliteChannelRepo(tmp_path / "feed.db")
+    try:
+        channel_repo.set_channel_id(source.id, "CSTORED")
+        resolver = SourceChannelResolver(
+            source=source,
+            channel_repo=channel_repo,
+            channel_provisioner=provisioner,
+        )
+
+        assert resolver.get_channel_id(source.id) == "CSTORED"
+        assert resolver.get_channel_id(source.id) == "CSTORED"
+
+        assert provisioner.metadata_updates == [
+            ("CSTORED", source.name, "https://example.test/mofa"),
+            ("CSTORED", source.name, "https://example.test/mofa"),
+        ]
+        assert channel_repo.get_channel_metadata(source.id) == (None, None, None)
+    finally:
+        close_repos(channel_repo)
 
 
 def test_infer_from_error_classifies_common_failures() -> None:

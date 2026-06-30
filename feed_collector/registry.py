@@ -77,6 +77,7 @@ def _source_from_mapping(index: int, raw: object) -> SourceConfig:
         channel_id=_optional_str(raw, "channel_id", index),
         interval_minutes=_required_int(raw, "interval_minutes", index),
         url=_required_str(raw, "url", index),
+        display_url=_optional_str(raw, "display_url", index),
         params=_params(raw.get("params"), source_id),
         list_path=_optional_str(raw, "list_path", index),
         detail_url=_optional_str(raw, "detail_url", index),

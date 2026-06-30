@@ -29,6 +29,7 @@ class SourceConfig:
     channel_id: str | None
     interval_minutes: int
     url: str
+    display_url: str | None = None
     params: Mapping[str, ParamValue] = field(default_factory=dict)
     list_path: str | None = None
     detail_url: str | None = None

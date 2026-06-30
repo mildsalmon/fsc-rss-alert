@@ -60,6 +60,9 @@ class SqliteRepoBase:
             )
             self._ensure_column("sources", "last_failure_reason", "TEXT")
             self._ensure_column("sources", "last_failure_at", "TEXT")
+            self._ensure_column("sources", "channel_metadata_name", "TEXT")
+            self._ensure_column("sources", "channel_metadata_url", "TEXT")
+            self._ensure_column("sources", "channel_metadata_version", "INTEGER")
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS seen_items (

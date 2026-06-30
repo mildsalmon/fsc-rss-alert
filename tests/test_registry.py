@@ -40,6 +40,7 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
           channel_id:
           interval_minutes: 30
           url: https://example.test/datatables
+          display_url: https://example.test/lawreq
           params:
             stNo: 11
             muNo: 85
@@ -125,6 +126,7 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
     assert mofa.params["fetch_profile"] == "mofa_cookie_gate"
     assert isinstance(mofa_adapter, RssAdapter)
     assert isinstance(mofa_adapter.fetcher, MofaCookieGateFetcher)
+    assert lawreq.display_url == "https://example.test/lawreq"
     assert isinstance(lawreq_adapter, DataTablesAdapter)
     assert isinstance(fss_adapter, HtmlScrapeAdapter)
     assert isinstance(fsc_legislation_adapter, HtmlScrapeAdapter)
@@ -142,10 +144,18 @@ def test_default_better_fsc_detail_urls_keep_menu_params() -> None:
         lawreq.detail_url
         == "https://better.fsc.go.kr/fsc_new/replyCase/LawreqDetail.do?stNo=11&muNo=85&muGpNo=75&lawreqIdx={id}"
     )
+    assert (
+        lawreq.display_url
+        == "https://better.fsc.go.kr/fsc_new/replyCase/LawreqList.do?muGpNo=75&muNo=85&stNo=11"
+    )
     assert lawreq.params["published_detail_label"] == "회신일"
     assert (
         opinion.detail_url
         == "https://better.fsc.go.kr/fsc_new/replyCase/OpinionDetail.do?stNo=11&muNo=84&muGpNo=75&opinionIdx={id}"
+    )
+    assert (
+        opinion.display_url
+        == "https://better.fsc.go.kr/fsc_new/replyCase/OpinionList.do?muGpNo=75&muNo=86&stNo=11"
     )
     assert opinion.params["item_id_field"] == "opinionIdx"
     assert opinion.params["ordering_field"] == "opinionNumber"
@@ -187,25 +197,30 @@ def test_default_fiu_source_uses_json_board_config() -> None:
     assert fiu.slug == "fiu-sanctions"
     assert fiu.mechanism == "json_board"
     assert fiu.url == "https://www.kofiu.go.kr/cmn/board/selectBoardListFile.do"
+    assert fiu.display_url == "https://www.kofiu.go.kr/kor/notification/sanctions.do"
     assert fiu.params["seCd"] == "0022"
     assert fiu.params["item_id_field"] == "ntcnYardOrdrNo"
     assert fiu.params["ordering_field"] == "ntcnYardOrdrNo"
     assert fiu.list_path == "result"
 
 
-def test_default_ofac_source_uses_bulk_config() -> None:
+def test_default_ofac_source_uses_recent_actions_html_config() -> None:
     sources = {source.id: source for source in load_sources(Path("sources.yaml"))}
 
     ofac = sources["ofac-sdn"]
 
-    assert ofac.name == "OFAC SDN"
+    assert ofac.name == "OFAC Sanctions List Updates"
     assert ofac.slug == "ofac-sdn"
-    assert ofac.mechanism == "bulk"
-    assert ofac.url == "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.XML"
+    assert ofac.mechanism == "html"
+    assert ofac.url == "https://ofac.treasury.gov/recent-actions/sanctions-list-updates"
+    assert ofac.display_url == "https://ofac.treasury.gov/recent-actions/sanctions-list-updates"
+    assert ofac.params["row_tag"] == "div"
+    assert ofac.params["row_class_contains"] == "views-row"
+    assert ofac.params["link_href_contains"] == "/recent-actions/"
+    assert ofac.params["item_id_regex"] == "/recent-actions/(?P<id>[^/?#]+)"
+    assert ofac.params["published_regex"] == r"(?P<date>[A-Z][a-z]+ \d{1,2}, \d{4})"
     assert ofac.params["published_timezone"] == "UTC"
     assert ofac.params["timeout_seconds"] == 60
-    assert ofac.params["max_seen_items_per_source"] is None
-    assert ofac.detail_url == "https://sanctionssearch.ofac.treas.gov/Details.aspx?id={id}"
 
 
 def test_load_sources_rejects_bad_source_shape(tmp_path: Path) -> None:

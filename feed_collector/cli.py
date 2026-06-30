@@ -40,6 +40,10 @@ from feed_collector.registry import SourceAdapterFactory, SourceAdapterRegistry,
 class ChannelStateStore(ChannelResolverPort, Protocol):
     def set_channel_id(self, source_id: str, channel_id: str) -> None: ...
 
+    def get_channel_metadata(self, source_id: str) -> tuple[str | None, str | None, int | None]: ...
+
+    def set_channel_metadata(self, source_id: str, display_name: str, source_url: str, version: int) -> None: ...
+
 
 IMMEDIATE_FAILURE_REASONS = frozenset(
     {
@@ -52,6 +56,7 @@ IMMEDIATE_FAILURE_REASONS = frozenset(
 OPS_CHANNEL_STATE_ID = "feed-ops"
 OPS_CHANNEL_SLUG = "ops"
 OPS_CHANNEL_DISPLAY_NAME = "Feed Collector Ops"
+CHANNEL_METADATA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -66,8 +71,10 @@ class SourceChannelResolver(ChannelResolverPort):
 
         stored_channel_id = self.channel_repo.get_channel_id(source_id)
         if stored_channel_id:
+            self._update_channel_metadata_if_needed(stored_channel_id)
             return stored_channel_id
         if self.source.channel_id:
+            self._update_channel_metadata_if_needed(self.source.channel_id)
             return self.source.channel_id
         if self.channel_provisioner is None:
             return None
@@ -75,10 +82,35 @@ class SourceChannelResolver(ChannelResolverPort):
         channel_id = self.channel_provisioner.ensure_feed_channel(
             self.source.slug,
             display_name=self.source.name,
-            source_url=self.source.url,
+            source_url=channel_metadata_url(self.source),
         )
         self.channel_repo.set_channel_id(source_id, channel_id)
         return channel_id
+
+    def refresh_existing_channel_metadata(self) -> None:
+        channel_id = self.channel_repo.get_channel_id(self.source.id) or self.source.channel_id
+        if channel_id:
+            self._update_channel_metadata_if_needed(channel_id)
+
+    def _update_channel_metadata_if_needed(self, channel_id: str) -> None:
+        if self.channel_provisioner is None:
+            return
+        metadata_url = channel_metadata_url(self.source)
+        display_name, source_url, version = self.channel_repo.get_channel_metadata(self.source.id)
+        if display_name == self.source.name and source_url == metadata_url and version == CHANNEL_METADATA_VERSION:
+            return
+        updated = self.channel_provisioner.update_feed_channel_metadata(
+            channel_id,
+            display_name=self.source.name,
+            source_url=metadata_url,
+        )
+        if updated:
+            self.channel_repo.set_channel_metadata(
+                self.source.id,
+                self.source.name,
+                metadata_url,
+                CHANNEL_METADATA_VERSION,
+            )
 
 
 @dataclass
@@ -112,6 +144,11 @@ class PollRunner:
     def _run_one(self, source: SourceConfig, *, dry_run: bool) -> int:
         if not dry_run:
             self.source_state.ensure_source(source)
+            SourceChannelResolver(
+                source=source,
+                channel_repo=self.channel_repo,
+                channel_provisioner=self.channel_provisioner,
+            ).refresh_existing_channel_metadata()
 
         run_state = self.source_state.get_state(source.id)
         if not is_due(source, run_state, now=self._now()):
@@ -241,6 +278,10 @@ def failure_alert_item(
         link=source.url,
         published=current,
     )
+
+
+def channel_metadata_url(source: SourceConfig) -> str:
+    return source.display_url or source.url
 
 
 def run_poll(args: argparse.Namespace) -> int:
@@ -403,6 +444,13 @@ class DryRunChannelStore(ChannelStateStore):
     def set_channel_id(self, source_id: str, channel_id: str) -> None:
         del source_id, channel_id
 
+    def get_channel_metadata(self, source_id: str) -> tuple[str | None, str | None, int | None]:
+        del source_id
+        return None, None, None
+
+    def set_channel_metadata(self, source_id: str, display_name: str, source_url: str, version: int) -> None:
+        del source_id, display_name, source_url, version
+
 
 class NoopNotifier(NotifierPort):
     def send(self, channel_id: str, item: Item) -> str | None:
@@ -559,6 +607,7 @@ def ensure_ops_channel_id(
 __all__ = [
     "PollRunner",
     "SourceChannelResolver",
+    "channel_metadata_url",
     "ensure_ops_channel_id",
     "failure_alert_item",
     "is_due",
