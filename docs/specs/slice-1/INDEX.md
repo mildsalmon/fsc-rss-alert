@@ -24,7 +24,7 @@
 - **Terraform IaC.** ※ 코멘트: Terraform을 별도 레포로 뺄지 현 레포(`fsc-rss-alert`)에서 할지는
   슬라이스2 착수 시 결정한다. 지금은 결정하지 않는다.
 - 나머지 5소스: FSS 보도자료(HTML), FSC 입법예고(HTML), FIU 제재공시(JSON board),
-  비조치의견서(DataTables — T4 어댑터 재사용), OFAC SDN(벌크 diff).
+  비조치의견서(DataTables — T4 어댑터 재사용), OFAC 제재목록 업데이트(HTML Recent Actions).
 
 ## Task 목록
 | ID | 제목 | 파일 | 의존 | 상태 | Effort(CC) |
@@ -57,7 +57,7 @@ T3·T4·T5는 T1b의 port 인터페이스를 대상으로 병렬 구현 가능. 
 - **헥사고날을 얇게:** ports=`typing.Protocol`, adapters=클래스. 서비스레이어·DI프레임워크 금지.
 - **코어 순수성:** 도메인 코어(`domain.py`/`core/`)는 httpx·bs4·feedparser·slack-sdk를 import하지 않는다.
 - **공통 타입 `Item`**(item_id/title/link/published:datetime|None)으로 모든 어댑터가 정규화.
-- **dedup:** 안정키 우선(guid/idx/UID) → 없으면 `content://{source}/<sha256(title|body|published)>`.
+- **dedup:** 안정키 우선(guid/idx/OFAC recent-action path id) → 없으면 `content://{source}/<sha256(title|body|published)>`.
   `UNIQUE(source_id,item_id)`로 DB 강제.
 - **누락 방지:** 첫 실행은 기준선만 저장(알림 0). fetch/파싱/발송 실패 시 seen 전진 금지. oldest-first 발송.
 - **실패 가시성:** `FetchFailureReason` enum + 즉시 실패알림 + daily digest.
@@ -86,7 +86,7 @@ T3·T4·T5는 T1b의 port 인터페이스를 대상으로 병렬 구현 가능. 
 5. 로컬에서 `poll`/`digest` CLI로 끝→끝 동작. 전 task 단위테스트 통과.
 
 ## NOT in scope (슬라이스1)
-- 나머지 5소스(FSS·FSC입법예고·FIU·비조치·OFAC) — 슬라이스2. 어댑터 3종 추가 + config 2개.
+- 나머지 5소스(FSS·FSC입법예고·FIU·비조치·OFAC) — 슬라이스2. HTML/JSON/DataTables config 확장.
 - EC2·Docker·ECR·Terraform·cron pull — 슬라이스2.
 - 자가등록 webhook 수신, 실시간 `/health` 엔드포인트(B 워커) — 슬라이스2+.
 - 아웃박스(정확히-한번 전송) — 편의 도구라 at-least-once 허용으로 대체.
