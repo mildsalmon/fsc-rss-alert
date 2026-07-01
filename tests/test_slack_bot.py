@@ -175,6 +175,12 @@ def test_slack_channel_manager_reuses_existing_channel_on_name_taken() -> None:
                     "channels": [{"id": "CFEED", "name": "feed-feed-ops", "is_member": True}],
                     "response_metadata": {"next_cursor": ""},
                 }
+            ),
+            FakeResponse(
+                {
+                    "ok": True,
+                    "channel": {"purpose": {"value": ""}, "topic": {"value": ""}},
+                }
             )
         ],
     )
@@ -192,6 +198,8 @@ def test_slack_channel_manager_reuses_existing_channel_on_name_taken() -> None:
     assert session.posts[2]["json"] == {"channel": "CFEED", "topic": "feed ops"}
     assert session.gets[0]["url"] == "https://slack.com/api/conversations.list"
     assert session.gets[0]["params"]["types"] == "public_channel"
+    assert session.gets[1]["url"] == "https://slack.com/api/conversations.info"
+    assert session.gets[1]["params"] == {"channel": "CFEED"}
 
 
 def test_slack_channel_manager_joins_existing_public_channel_on_name_taken() -> None:
@@ -209,6 +217,12 @@ def test_slack_channel_manager_joins_existing_public_channel_on_name_taken() -> 
                     "channels": [{"id": "CFEED", "name": "feed-feed-ops", "is_member": False}],
                     "response_metadata": {"next_cursor": ""},
                 }
+            ),
+            FakeResponse(
+                {
+                    "ok": True,
+                    "channel": {"purpose": {"value": ""}, "topic": {"value": ""}},
+                }
             )
         ],
     )
@@ -220,6 +234,78 @@ def test_slack_channel_manager_joins_existing_public_channel_on_name_taken() -> 
     assert session.posts[1]["json"] == {"channel": "CFEED"}
     assert session.posts[2]["url"] == "https://slack.com/api/conversations.setPurpose"
     assert session.posts[3]["url"] == "https://slack.com/api/conversations.setTopic"
+
+
+def test_slack_channel_manager_does_not_overwrite_existing_metadata() -> None:
+    session = FakeSlackSession(
+        post_responses=[
+            FakeResponse({"ok": False, "error": "name_taken"}),
+        ],
+        get_responses=[
+            FakeResponse(
+                {
+                    "ok": True,
+                    "channels": [{"id": "CFEED", "name": "feed-feed-ops", "is_member": True}],
+                    "response_metadata": {"next_cursor": ""},
+                }
+            ),
+            FakeResponse(
+                {
+                    "ok": True,
+                    "channel": {
+                        "purpose": {"value": "existing purpose"},
+                        "topic": {"value": "existing topic"},
+                    },
+                }
+            ),
+        ],
+    )
+    manager = SlackChannelManager(bot_token="xoxb-test", session=session)
+
+    assert manager.ensure_feed_channel("feed ops", display_name="Feed Collector Ops") == "CFEED"
+
+    assert [post["url"] for post in session.posts] == ["https://slack.com/api/conversations.create"]
+    assert session.gets[1]["url"] == "https://slack.com/api/conversations.info"
+
+
+def test_slack_channel_manager_sets_only_empty_metadata_fields() -> None:
+    session = FakeSlackSession(
+        post_responses=[
+            FakeResponse({"ok": True}),
+        ],
+        get_responses=[
+            FakeResponse(
+                {
+                    "ok": True,
+                    "channel": {
+                        "purpose": {"value": "existing purpose"},
+                        "topic": {"value": ""},
+                    },
+                }
+            )
+        ],
+    )
+    manager = SlackChannelManager(bot_token="xoxb-test", session=session)
+
+    assert manager.update_feed_channel_metadata("CFEED", display_name="Feed Collector Ops") is True
+
+    assert [post["url"] for post in session.posts] == ["https://slack.com/api/conversations.setTopic"]
+    assert session.posts[0]["json"] == {"channel": "CFEED", "topic": "Feed Collector Ops"}
+
+
+def test_slack_channel_manager_skips_metadata_update_when_current_metadata_is_unavailable() -> None:
+    session = FakeSlackSession(
+        post_responses=[],
+        get_responses=[
+            FakeResponse({"ok": False, "error": "missing_scope"}),
+        ],
+    )
+    manager = SlackChannelManager(bot_token="xoxb-test", session=session)
+
+    assert manager.update_feed_channel_metadata("CFEED", display_name="Feed Collector Ops") is True
+
+    assert session.posts == []
+    assert session.gets[0]["url"] == "https://slack.com/api/conversations.info"
 
 
 def test_slack_channel_manager_rejects_existing_private_channel_when_not_member() -> None:
@@ -291,10 +377,18 @@ def test_slack_channel_manager_sets_source_metadata() -> None:
 
 def test_slack_channel_metadata_update_is_best_effort_for_scope_errors() -> None:
     session = FakeSlackSession(
-        [
+        post_responses=[
             FakeResponse({"ok": False, "error": "missing_scope"}),
             FakeResponse({"ok": False, "error": "missing_scope"}),
-        ]
+        ],
+        get_responses=[
+            FakeResponse(
+                {
+                    "ok": True,
+                    "channel": {"purpose": {"value": ""}, "topic": {"value": ""}},
+                }
+            )
+        ],
     )
     manager = SlackChannelManager(bot_token="xoxb-test", session=session)
 

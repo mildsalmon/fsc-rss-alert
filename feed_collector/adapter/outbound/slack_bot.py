@@ -224,7 +224,12 @@ class SlackChannelManager(ChannelProvisionerPort):
         data = self.api.post("conversations.create", {"name": name}, allowed_errors=("name_taken",))
         channel_id = _channel_id_from_data(data)
         if channel_id is not None:
-            self.update_feed_channel_metadata(channel_id, display_name=display_name or slug, source_url=source_url)
+            self._set_feed_channel_metadata(
+                channel_id,
+                display_name=display_name or slug,
+                source_url=source_url,
+                only_if_empty=False,
+            )
             return channel_id
 
         if data.get("error") == "name_taken":
@@ -244,12 +249,41 @@ class SlackChannelManager(ChannelProvisionerPort):
         display_name: str | None = None,
         source_url: str | None = None,
     ) -> bool:
+        return self._set_feed_channel_metadata(
+            channel_id,
+            display_name=display_name,
+            source_url=source_url,
+            only_if_empty=True,
+        )
+
+    def _set_feed_channel_metadata(
+        self,
+        channel_id: str,
+        *,
+        display_name: str | None = None,
+        source_url: str | None = None,
+        only_if_empty: bool,
+    ) -> bool:
         purpose = format_feed_channel_purpose(display_name=display_name, source_url=source_url)
         topic = format_feed_channel_topic(display_name=display_name, source_url=source_url)
-        for method, payload_key, text in (
+        updates = [
             ("conversations.setPurpose", "purpose", purpose),
             ("conversations.setTopic", "topic", topic),
-        ):
+        ]
+        if only_if_empty:
+            current_metadata = self._get_channel_metadata(channel_id)
+            if current_metadata is None:
+                return True
+            current_purpose, current_topic = current_metadata
+            updates = []
+            if current_purpose is None:
+                updates.append(("conversations.setPurpose", "purpose", purpose))
+            if current_topic is None:
+                updates.append(("conversations.setTopic", "topic", topic))
+            if not updates:
+                return True
+
+        for method, payload_key, text in updates:
             try:
                 data = self.api.post(
                     method,
@@ -261,6 +295,22 @@ class SlackChannelManager(ChannelProvisionerPort):
             if data.get("ok") is not True:
                 return False
         return True
+
+    def _get_channel_metadata(self, channel_id: str) -> tuple[str | None, str | None] | None:
+        try:
+            data = self.api.get(
+                "conversations.info",
+                {"channel": channel_id},
+                allowed_errors=SLACK_CHANNEL_METADATA_ALLOWED_ERRORS,
+            )
+        except Exception:  # noqa: BLE001
+            return None
+        if data.get("ok") is not True:
+            return None
+        channel = data.get("channel")
+        if not isinstance(channel, Mapping):
+            return None
+        return _slack_metadata_value(channel.get("purpose")), _slack_metadata_value(channel.get("topic"))
 
     def find_channel_by_name(self, name: str) -> Mapping[str, Any] | None:
         cursor = ""
@@ -346,6 +396,16 @@ def _truncate_metadata(value: str) -> str:
     if len(value) <= SLACK_CHANNEL_METADATA_LIMIT:
         return value
     return f"{value[: SLACK_CHANNEL_METADATA_LIMIT - 3]}..."
+
+
+def _slack_metadata_value(value: object) -> str | None:
+    if not isinstance(value, Mapping):
+        return None
+    raw_value = value.get("value")
+    if not isinstance(raw_value, str):
+        return None
+    stripped = raw_value.strip()
+    return stripped or None
 
 
 def _channel_id_from_data(data: Mapping[str, Any]) -> str | None:
