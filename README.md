@@ -117,3 +117,14 @@ launchctl bootout "gui/$(id -u)" ~/Library/LaunchAgents/com.mildsalmon.feed-coll
 - `FETCH_TIMEOUT_SECONDS`: RSS 및 알림 HTTP 요청 timeout, 기본값 `20`
 - `FETCH_RETRIES`: RSS fetch 재시도 횟수, 기본값 `3`
 - `FETCH_RETRY_DELAY_SECONDS`: RSS fetch 재시도 사이 대기 시간, 기본값 `10`
+
+## AWS EC2 배포
+
+slice-2 배포 작업은 `Dockerfile`, `.github/workflows/publish-ecr.yml`, `infra/aws/`에 있습니다.
+
+- `main` push 시 GitHub Actions가 Docker 이미지를 ECR에 `latest`와 commit SHA tag로 push합니다.
+- EC2는 cron으로 실행 직전에 ECR `latest` 이미지를 pull하고 컨테이너를 실행합니다.
+- sqlite 상태 DB는 EC2 호스트 `/data/feed-collector/feed.db`에 유지합니다.
+- Slack 토큰은 Terraform state에 넣지 않고 EC2 `.env` 또는 SSM SecureString parameter name으로 주입합니다.
+
+자세한 절차는 `infra/aws/README.md`를 참고하세요.

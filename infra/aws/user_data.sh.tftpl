@@ -1,0 +1,74 @@
+#!/bin/bash
+set -euxo pipefail
+
+dnf update -y
+dnf install -y docker cronie amazon-ecr-credential-helper
+
+if [ -n "${slack_bot_token_parameter_name}" ]; then
+  dnf install -y awscli-2 || dnf install -y awscli
+fi
+
+systemctl enable --now docker
+systemctl enable --now crond
+
+mkdir -p /root/.docker
+cat >/root/.docker/config.json <<'JSON'
+{
+  "credHelpers": {
+    "${ecr_registry_host}": "ecr-login"
+  }
+}
+JSON
+
+mkdir -p /opt/feed-collector /data/feed-collector /var/log/feed-collector
+chmod 700 /data/feed-collector
+
+cat >/opt/feed-collector/.env.example <<'ENV'
+SLACK_BOT_TOKEN=
+SLACK_TIMEOUT_SECONDS=20
+ENV
+
+if [ -n "${slack_bot_token_parameter_name}" ]; then
+  SLACK_BOT_TOKEN_VALUE="$(aws ssm get-parameter --name "${slack_bot_token_parameter_name}" --with-decryption --query 'Parameter.Value' --output text --region "${aws_region}")"
+  cat >/opt/feed-collector/.env <<ENV
+SLACK_BOT_TOKEN=$${SLACK_BOT_TOKEN_VALUE}
+SLACK_TIMEOUT_SECONDS=20
+ENV
+elif [ ! -f /opt/feed-collector/.env ]; then
+  cp /opt/feed-collector/.env.example /opt/feed-collector/.env
+fi
+chmod 600 /opt/feed-collector/.env
+
+cat >/opt/feed-collector/run.sh <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+COMMAND="$${1:?usage: run.sh poll|digest [args...]}"
+shift || true
+
+IMAGE="${ecr_repository_url}:latest"
+CONTAINER_NAME="feed-collector-$${COMMAND}-$$(date +%s)"
+
+docker pull "$${IMAGE}"
+docker run --rm \
+  --name "$${CONTAINER_NAME}" \
+  --env-file /opt/feed-collector/.env \
+  -e TZ=Asia/Seoul \
+  -v /data/feed-collector:/data \
+  "$${IMAGE}" "$${COMMAND}" \
+  --db-path /data/feed.db \
+  --lock-file /data/feed.lock \
+  "$${@}"
+SCRIPT
+chmod 750 /opt/feed-collector/run.sh
+
+cat >/etc/cron.d/feed-collector <<CRON
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+CRON_TZ=Asia/Seoul
+${poll_cron_expression} root /opt/feed-collector/run.sh poll >> /var/log/feed-collector/poll.log 2>&1
+${digest_cron_expression} root /opt/feed-collector/run.sh digest >> /var/log/feed-collector/digest.log 2>&1
+CRON
+chmod 644 /etc/cron.d/feed-collector
+
+touch /var/log/feed-collector/poll.log /var/log/feed-collector/digest.log
