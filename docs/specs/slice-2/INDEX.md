@@ -24,7 +24,7 @@
 
 - ECR private repository + lifecycle policy.
 - GitHub Actions OIDC provider/role for ECR push.
-- EC2 instance role/profile for ECR pull.
+- EC2 instance role/profile for ECR pull and Systems Manager Session Manager access.
 - Optional SSM Parameter Store read permission for Slack token parameter name.
 - Security group with outbound-only default; SSH ingress is opt-in.
 - EC2 public IPv4 is enabled by default for simple outbound HTTPS egress to ECR, RSS, and Slack; it can be disabled when the selected subnet has another outbound path.
