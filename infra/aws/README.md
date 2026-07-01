@@ -6,7 +6,7 @@ This stack runs Feed Collector on one EC2 instance as cron-triggered Docker batc
 
 - Private ECR repository with lifecycle policy that keeps only the latest 3 images.
 - GitHub Actions OIDC role that can push to the ECR repository.
-- EC2 instance role/profile with ECR read permission.
+- EC2 instance role/profile with ECR read and Systems Manager Session Manager permissions.
 - Optional EC2 permission to read one SSM Parameter Store SecureString for `SLACK_BOT_TOKEN`.
 - Security group with outbound access; SSH ingress only when `ssh_ingress_cidr_blocks` is set.
 - Amazon Linux 2023 EC2 instance bootstrapped with Docker, cron, ECR credential helper, and `/opt/feed-collector/run.sh`.
@@ -49,6 +49,16 @@ associate_public_ip_address = false
 ```
 
 Using public IPv4 is simpler, but it can add fixed hourly IPv4 charges. Inbound access still remains closed unless `ssh_ingress_cidr_blocks` is configured.
+
+Session Manager is enabled through the EC2 instance profile, so SSH keys are optional.
+After Terraform applies the role attachment, wait a few minutes, then use:
+
+```bash
+aws ssm start-session --target "$(terraform output -raw instance_id)"
+```
+
+The AWS console path is `Systems Manager` -> `Session Manager` -> `Start session`.
+If the instance does not appear immediately, confirm that it has outbound internet access and wait for SSM Agent registration.
 
 Secrets are intentionally not Terraform variables. Use one of these:
 
