@@ -47,7 +47,7 @@ COMMAND="$${1:?usage: run.sh poll|digest [args...]}"
 shift || true
 
 IMAGE="${ecr_repository_url}:latest"
-CONTAINER_NAME="feed-collector-$${COMMAND}-$$(date +%s)"
+CONTAINER_NAME="feed-collector-$${COMMAND}-$(date +%s)"
 
 docker pull "$${IMAGE}"
 docker run --rm \
