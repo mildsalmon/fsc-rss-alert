@@ -188,6 +188,11 @@ resource "aws_iam_role_policy_attachment" "ec2_ecr_read" {
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+resource "aws_iam_role_policy_attachment" "ec2_ssm_managed_instance_core" {
+  role       = aws_iam_role.ec2.name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 resource "aws_iam_role_policy" "ec2_ssm_parameter_read" {
   count = var.slack_bot_token_parameter_name == null ? 0 : 1
 
