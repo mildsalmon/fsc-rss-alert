@@ -104,6 +104,24 @@ def test_map_row_to_item_link_and_kst_published() -> None:
     assert offset.total_seconds() == 9 * 60 * 60
 
 
+def test_map_row_can_use_revision_field_for_dedup_id() -> None:
+    item = JsonBoardRowMapper().map(
+        {
+            "ntcnYardOrdrNo": "131",
+            "ntcnYardSjNm": "전북은행 제재내용 공개안",
+            "ntcnYardRgiDt": "2026-07-01 09:21:31",
+            "ntcnYardChangeDt": "2026-07-02 09:21:41",
+        },
+        make_source(params={"item_revision_field": "ntcnYardChangeDt"}),
+    )
+
+    assert item.item_id == "131#revision=2026-07-02 09:21:41"
+    assert (
+        item.link
+        == "https://www.kofiu.go.kr/kor/notification/sanctions_view.do?ntcnYardOrdrNo=131&seCd=0022"
+    )
+
+
 def test_ordering_validator_accepts_newest_first_rows() -> None:
     JsonBoardOrderingValidator().validate_newest_first(
         [
@@ -123,6 +141,19 @@ def test_ordering_validator_rejects_older_before_newer_rows() -> None:
             ],
             make_source(),
         )
+
+
+def test_ordering_validator_can_use_published_field_when_ids_are_not_newest_first() -> None:
+    JsonBoardOrderingValidator().validate_newest_first(
+        [
+            {"ntcnYardOrdrNo": "130", "ntcnYardSjNm": "Newest", "ntcnYardRgiDt": "2026-07-01 09:38:57"},
+            {"ntcnYardOrdrNo": "129", "ntcnYardSjNm": "Newer", "ntcnYardRgiDt": "2026-07-01 09:38:46"},
+            {"ntcnYardOrdrNo": "128", "ntcnYardSjNm": "New", "ntcnYardRgiDt": "2026-07-01 09:38:34"},
+            {"ntcnYardOrdrNo": "127", "ntcnYardSjNm": "Old", "ntcnYardRgiDt": "2026-07-01 09:38:21"},
+            {"ntcnYardOrdrNo": "131", "ntcnYardSjNm": "Older", "ntcnYardRgiDt": "2026-07-01 09:21:31"},
+        ],
+        make_source(params={"ordering_field": None}),
+    )
 
 
 def test_rows_extractor_reads_configured_list_path() -> None:

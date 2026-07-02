@@ -101,7 +101,6 @@ def test_load_sources_yaml_and_dispatches_mechanisms(tmp_path: Path) -> None:
             item_id_field: ntcnYardOrdrNo
             title_field: ntcnYardSjNm
             published_field: ntcnYardRgiDt
-            ordering_field: ntcnYardOrdrNo
           list_path: result
           detail_url: https://www.kofiu.go.kr/kor/notification/sanctions_view.do?ntcnYardOrdrNo={id}&seCd=0022
           empty_result_policy: error
@@ -226,7 +225,9 @@ def test_default_fiu_source_uses_json_board_config() -> None:
     assert fiu.display_url == "https://www.kofiu.go.kr/kor/notification/sanctions.do"
     assert fiu.params["seCd"] == "0022"
     assert fiu.params["item_id_field"] == "ntcnYardOrdrNo"
-    assert fiu.params["ordering_field"] == "ntcnYardOrdrNo"
+    assert fiu.params["item_revision_field"] == "ntcnYardChangeDt"
+    assert fiu.params["published_field"] == "ntcnYardRgiDt"
+    assert "ordering_field" not in fiu.params
     assert fiu.list_path == "result"
 
 

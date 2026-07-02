@@ -108,9 +108,9 @@
     page: 1
     size: 10
     item_id_field: ntcnYardOrdrNo
+    item_revision_field: ntcnYardChangeDt
     title_field: ntcnYardSjNm
     published_field: ntcnYardRgiDt
-    ordering_field: ntcnYardOrdrNo
   list_path: result
   detail_url: https://www.kofiu.go.kr/kor/notification/sanctions_view.do?ntcnYardOrdrNo={id}&seCd=0022
   empty_result_policy: error
