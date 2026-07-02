@@ -125,6 +125,19 @@ def test_ordering_validator_rejects_older_before_newer_rows() -> None:
         )
 
 
+def test_ordering_validator_can_use_published_field_when_ids_are_not_newest_first() -> None:
+    JsonBoardOrderingValidator().validate_newest_first(
+        [
+            {"ntcnYardOrdrNo": "130", "ntcnYardSjNm": "Newest", "ntcnYardRgiDt": "2026-07-01 09:38:57"},
+            {"ntcnYardOrdrNo": "129", "ntcnYardSjNm": "Newer", "ntcnYardRgiDt": "2026-07-01 09:38:46"},
+            {"ntcnYardOrdrNo": "128", "ntcnYardSjNm": "New", "ntcnYardRgiDt": "2026-07-01 09:38:34"},
+            {"ntcnYardOrdrNo": "127", "ntcnYardSjNm": "Old", "ntcnYardRgiDt": "2026-07-01 09:38:21"},
+            {"ntcnYardOrdrNo": "131", "ntcnYardSjNm": "Older", "ntcnYardRgiDt": "2026-07-01 09:21:31"},
+        ],
+        make_source(params={"ordering_field": None}),
+    )
+
+
 def test_rows_extractor_reads_configured_list_path() -> None:
     rows = JsonBoardRowsExtractor().extract(
         {"payload": {"items": [{"ntcnYardOrdrNo": "126"}]}},
