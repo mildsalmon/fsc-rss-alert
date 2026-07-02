@@ -20,6 +20,7 @@ DEFAULT_PUBLISHED_TIMEZONE = "Asia/Seoul"
 ADAPTER_PARAM_KEYS = frozenset(
     {
         "item_id_field",
+        "item_revision_field",
         "ordering_field",
         "published_field",
         "published_timezone",
@@ -121,11 +122,22 @@ class JsonBoardRowMapper:
             raise JsonBoardAdapterError(f"Source {cfg.id} requires detail_url")
 
         return Item(
-            item_id=str(item_id),
+            item_id=self._item_id(row, cfg, item_id),
             title=str(title),
             link=cfg.detail_url.format(id=item_id),
             published=self._published(row, cfg, published_field),
         )
+
+    def _item_id(self, row: Mapping[str, Any], cfg: SourceConfig, base_item_id: object) -> str:
+        revision_field = self._optional_field_param(cfg, "item_revision_field")
+        if revision_field is None:
+            return str(base_item_id)
+
+        revision = self._required(row, revision_field, cfg)
+        revision_text = " ".join(str(revision).split())
+        if not revision_text:
+            raise JsonBoardAdapterError(f"Source {cfg.id} row missing required field {revision_field!r}")
+        return f"{base_item_id}#revision={revision_text}"
 
     def ordering_value(self, row: Mapping[str, Any], cfg: SourceConfig) -> datetime | float | str:
         ordering_field = self._optional_field_param(cfg, "ordering_field")

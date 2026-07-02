@@ -104,6 +104,24 @@ def test_map_row_to_item_link_and_kst_published() -> None:
     assert offset.total_seconds() == 9 * 60 * 60
 
 
+def test_map_row_can_use_revision_field_for_dedup_id() -> None:
+    item = JsonBoardRowMapper().map(
+        {
+            "ntcnYardOrdrNo": "131",
+            "ntcnYardSjNm": "전북은행 제재내용 공개안",
+            "ntcnYardRgiDt": "2026-07-01 09:21:31",
+            "ntcnYardChangeDt": "2026-07-02 09:21:41",
+        },
+        make_source(params={"item_revision_field": "ntcnYardChangeDt"}),
+    )
+
+    assert item.item_id == "131#revision=2026-07-02 09:21:41"
+    assert (
+        item.link
+        == "https://www.kofiu.go.kr/kor/notification/sanctions_view.do?ntcnYardOrdrNo=131&seCd=0022"
+    )
+
+
 def test_ordering_validator_accepts_newest_first_rows() -> None:
     JsonBoardOrderingValidator().validate_newest_first(
         [

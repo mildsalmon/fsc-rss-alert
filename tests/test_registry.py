@@ -225,6 +225,7 @@ def test_default_fiu_source_uses_json_board_config() -> None:
     assert fiu.display_url == "https://www.kofiu.go.kr/kor/notification/sanctions.do"
     assert fiu.params["seCd"] == "0022"
     assert fiu.params["item_id_field"] == "ntcnYardOrdrNo"
+    assert fiu.params["item_revision_field"] == "ntcnYardChangeDt"
     assert fiu.params["published_field"] == "ntcnYardRgiDt"
     assert "ordering_field" not in fiu.params
     assert fiu.list_path == "result"
