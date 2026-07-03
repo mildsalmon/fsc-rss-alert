@@ -13,7 +13,7 @@ from feed_collector.adapter.outbound import (
     RssAdapterFactory,
 )
 from feed_collector.adapter.outbound.http_fetch import HttpFetchOptions
-from feed_collector.adapter.outbound.rss import parse_items
+from feed_collector.adapter.outbound.rss import EmptyFeedError, parse_items
 from feed_collector.domain import ParamValue, SourceConfig
 from feed_collector.errors import PollError
 
@@ -51,6 +51,9 @@ def make_source(
     )
 
 
+EMPTY_RSS_BYTES = b"<rss><channel><title>Empty</title></channel></rss>"
+
+
 @dataclass
 class FakeFetcher:
     payload: bytes = RSS_BYTES
@@ -59,6 +62,16 @@ class FakeFetcher:
     def fetch(self, url: str) -> bytes:
         self.called_urls.append(url)
         return self.payload
+
+
+@dataclass
+class SequenceFetcher:
+    payloads: list[bytes]
+    called_urls: list[str] = field(default_factory=list)
+
+    def fetch(self, url: str) -> bytes:
+        self.called_urls.append(url)
+        return self.payloads.pop(0)
 
 
 @dataclass
@@ -268,8 +281,63 @@ def test_rss_adapter_validates_fetch_params(params: dict[str, ParamValue], match
 
 
 def test_rss_adapter_empty_result_policy_controls_empty_feeds() -> None:
-    empty_feed = b"<rss><channel><title>Empty</title></channel></rss>"
+    assert parse_items(EMPTY_RSS_BYTES, source_id="mofa", empty_result_policy="valid") == []
+    with pytest.raises(EmptyFeedError, match="produced no items"):
+        parse_items(EMPTY_RSS_BYTES, source_id="mofa")
 
-    assert parse_items(empty_feed, source_id="mofa", empty_result_policy="valid") == []
-    with pytest.raises(PollError, match="produced no items"):
-        parse_items(empty_feed, source_id="mofa")
+
+def test_rss_adapter_retries_empty_parse_and_recovers() -> None:
+    fetcher = SequenceFetcher([EMPTY_RSS_BYTES, RSS_BYTES])
+    sleeps: list[float] = []
+    adapter = RssAdapter(
+        make_source(),
+        fetcher=fetcher,
+        empty_retries=2,
+        empty_retry_delay_seconds=5,
+        sleep_fn=sleeps.append,
+    )
+
+    items = adapter.fetch()
+
+    assert [item.item_id for item in items] == ["guid-1"]
+    assert len(fetcher.called_urls) == 2
+    assert sleeps == [5]
+
+
+def test_rss_adapter_raises_empty_feed_error_after_exhausting_retries() -> None:
+    fetcher = SequenceFetcher([EMPTY_RSS_BYTES, EMPTY_RSS_BYTES, EMPTY_RSS_BYTES])
+    sleeps: list[float] = []
+    adapter = RssAdapter(
+        make_source(),
+        fetcher=fetcher,
+        empty_retries=3,
+        empty_retry_delay_seconds=0,
+        sleep_fn=sleeps.append,
+    )
+
+    with pytest.raises(EmptyFeedError, match="produced no items"):
+        adapter.fetch()
+
+    assert len(fetcher.called_urls) == 3
+    assert sleeps == []
+
+
+def test_rss_adapter_does_not_retry_when_empty_result_policy_is_valid() -> None:
+    fetcher = SequenceFetcher([EMPTY_RSS_BYTES])
+    adapter = RssAdapter(
+        make_source(empty_result_policy="valid"),
+        fetcher=fetcher,
+        empty_retries=3,
+        empty_retry_delay_seconds=0,
+    )
+
+    assert adapter.fetch() == []
+    assert len(fetcher.called_urls) == 1
+
+
+def test_rss_adapter_factory_reads_empty_retry_params() -> None:
+    source = make_source(params={"empty_retries": 4, "empty_retry_delay_seconds": 1.5})
+    adapter = RssAdapterFactory(HttpFetcherFactory()).create(source)
+
+    assert adapter.empty_retries == 4
+    assert adapter.empty_retry_delay_seconds == 1.5

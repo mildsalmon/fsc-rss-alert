@@ -11,6 +11,7 @@ class PollError(RuntimeError):
 
 class FetchFailureReason(str, Enum):
     STRUCTURE_CHANGED = "STRUCTURE_CHANGED"
+    EMPTY_RESULT = "EMPTY_RESULT"
     BLOCKED = "BLOCKED"
     LOGIN_REQUIRED = "LOGIN_REQUIRED"
     NOT_FOUND = "NOT_FOUND"
@@ -37,9 +38,10 @@ def infer_from_error(exc: BaseException) -> FetchFailureReason:
         or "cookie gate" in messages
     ):
         return FetchFailureReason.BLOCKED
+    if "produced no items" in messages:
+        return FetchFailureReason.EMPTY_RESULT
     if (
         "parse failed" in messages
-        or "produced no items" in messages
         or "returned no rows" in messages
         or "list_path" in messages
         or "missing required field" in messages
