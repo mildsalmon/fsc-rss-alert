@@ -84,6 +84,19 @@ OFAC_RECENT_ACTIONS_HTML = """
           </div>
         </div>
       </div>
+      <div class="margin-bottom-4 search-result views-row">
+        <div>
+          <div class="font-sans-lg margin-bottom-05 margin-top-1 text-no-underline">
+            <a href="/recent-actions/20260701_33" hreflang="en">Reminder to File the 2026 Annual Report of Blocked Property</a>
+          </div>
+        </div>
+        <div>
+          <div class="margin-top-1 font-sans-2xs line-height-sans-3 margin-bottom-1">
+            July 1, 2026 -
+            <a href="/recent-actions/regulations-and-guidance">Regulations and Guidance</a>
+          </div>
+        </div>
+      </div>
     </div>
   </body>
 </html>
@@ -164,12 +177,12 @@ def make_ofac_recent_actions_source(
     return SourceConfig(
         id="ofac-sdn",
         slug="ofac-sdn",
-        name="OFAC Sanctions List Updates",
+        name="OFAC Recent Actions",
         mechanism="html",
         parser_version=1,
         channel_id=None,
         interval_minutes=30,
-        url="https://ofac.treasury.gov/recent-actions/sanctions-list-updates",
+        url="https://ofac.treasury.gov/recent-actions",
         params=base_params | (params or {}),
         empty_result_policy=empty_result_policy,
     )
@@ -224,11 +237,15 @@ def test_html_scrape_adapter_maps_ofac_recent_action_rows_to_items() -> None:
 
     items = adapter.fetch()
 
-    assert len(items) == 1
+    assert len(items) == 2
     assert items[0].item_id == "20260629"
     assert items[0].title == "Russia-related Designations Removals"
     assert items[0].link == "https://ofac.treasury.gov/recent-actions/20260629"
     assert items[0].published == datetime(2026, 6, 29, tzinfo=ZoneInfo("UTC"))
+    assert items[1].item_id == "20260701_33"
+    assert items[1].title == "Reminder to File the 2026 Annual Report of Blocked Property"
+    assert items[1].link == "https://ofac.treasury.gov/recent-actions/20260701_33"
+    assert items[1].published == datetime(2026, 7, 1, tzinfo=ZoneInfo("UTC"))
 
 
 def test_html_scrape_adapter_errors_on_empty_required_source() -> None:

@@ -236,11 +236,11 @@ def test_default_ofac_source_uses_recent_actions_html_config() -> None:
 
     ofac = sources["ofac-sdn"]
 
-    assert ofac.name == "OFAC Sanctions List Updates"
+    assert ofac.name == "OFAC Recent Actions"
     assert ofac.slug == "ofac-sdn"
     assert ofac.mechanism == "html"
-    assert ofac.url == "https://ofac.treasury.gov/recent-actions/sanctions-list-updates"
-    assert ofac.display_url == "https://ofac.treasury.gov/recent-actions/sanctions-list-updates"
+    assert ofac.url == "https://ofac.treasury.gov/recent-actions"
+    assert ofac.display_url == "https://ofac.treasury.gov/recent-actions"
     assert ofac.params["row_tag"] == "div"
     assert ofac.params["row_class_contains"] == "views-row"
     assert ofac.params["link_href_contains"] == "/recent-actions/"

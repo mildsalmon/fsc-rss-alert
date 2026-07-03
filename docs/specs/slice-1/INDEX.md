@@ -24,7 +24,7 @@
 - **Terraform IaC.** ※ 코멘트: Terraform을 별도 레포로 뺄지 현 레포(`fsc-rss-alert`)에서 할지는
   슬라이스2 착수 시 결정한다. 지금은 결정하지 않는다.
 - 나머지 5소스: FSS 보도자료(HTML), FSC 입법예고(HTML), FIU 제재공시(JSON board),
-  비조치의견서(DataTables — T4 어댑터 재사용), OFAC 제재목록 업데이트(HTML Recent Actions).
+  비조치의견서(DataTables — T4 어댑터 재사용), OFAC Recent Actions(HTML).
 
 ## Task 목록
 | ID | 제목 | 파일 | 의존 | 상태 | Effort(CC) |

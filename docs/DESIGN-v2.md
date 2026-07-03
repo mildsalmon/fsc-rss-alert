@@ -22,7 +22,7 @@ v1은 금융위(FSC) 보도자료 RSS 1개를 폴링해 Slack/Telegram으로 푸
 4. 금융위 법령해석
 5. 금융위 비조치의견서
 6. 외교부(MOFA) 독자제재
-7. OFAC 제재목록 업데이트 (Recent Actions)
+7. OFAC Recent Actions
 
 ## Requirements
 | ID | 요구사항 | 충족 방식 |
@@ -56,7 +56,7 @@ v1은 금융위(FSC) 보도자료 RSS 1개를 폴링해 Slack/Telegram으로 푸
 | 4 | 법령해석 | JSON (DataTables) | `POST selectReplyCaseLawreqList.do` | `draw/start/length/columns[]` 파라미터, 인증 불필요 |
 | 5 | 비조치의견서 | JSON (DataTables) | `POST selectReplyCaseOpinionList.do` | 위와 동일 패턴 |
 | 6 | MOFA 독자제재 | 네이티브 RSS | `rss.do?brdId=235` → application/rss+xml | `TMOSHCooKie` 307 self-redirect → 쿠키자 + 2-hit |
-| 7 | OFAC 제재목록 업데이트 | HTML 스크래핑 | `ofac.treasury.gov/recent-actions/sanctions-list-updates` | Drupal `views-row`, path 기반 id |
+| 7 | OFAC Recent Actions | HTML 스크래핑 | `ofac.treasury.gov/recent-actions` | Drupal `views-row`, path 기반 id |
 
 **메커니즘 수 정정(리뷰 반영):** JSON 소스는 응답뿐 아니라 **요청 모양도 다르다**.
 FIU의 eGov board(boardConfig + 페이징)와 better.fsc의 DataTables(`draw/start/length/columns[]`)는
@@ -262,9 +262,9 @@ cron이 매 tick 새 컨테이너를 띄우므로 동시 실행 위험이 있다
 - **audit_log 보존 = 90일 prune** (편의 도구라 경량). 컴플라이언스 등급 장기보존 불필요.
 - **전달 순서 = 수직 슬라이스(plan-ceo-review).** 슬라이스1 = MOFA RSS + better.fsc 법령해석을
   끝→끝(어댑터→sqlite→slack→EC2→cron→digest)으로 먼저 검증. 이후 5소스는 config+어댑터 반복.
-- **OFAC 기본 소스 = Recent Actions의 Sanctions List Updates.** 전체 SDN XML export가 아니라
-  `https://ofac.treasury.gov/recent-actions/sanctions-list-updates` HTML 목록을 수집한다. 알림 단위는
-  개별 SDN 엔트리가 아니라 OFAC가 게시한 제재목록 업데이트 글이며, `Item.item_id`는
+- **OFAC 기본 소스 = Recent Actions 전체 목록.** 전체 SDN XML export나 Sanctions List Updates
+  필터가 아니라 `https://ofac.treasury.gov/recent-actions` HTML 목록을 수집한다. 알림 단위는
+  개별 SDN 엔트리가 아니라 OFAC가 게시한 Recent Actions 글이며, `Item.item_id`는
   `/recent-actions/{id}` path segment다.
 - **Slack 채널 자동 생성 채택.** 스코프 = `chat:write` + `channels:manage` + `channels:read`.
   봇이 소스별 public 채널을 만들고 자기 입장 + 메시지 발송까지 자동. **사람(컴플라이언스 팀원)
@@ -285,7 +285,7 @@ Slack API 채널명은 ASCII 제약이 있으므로 실제 채널 handle은 ASCI
 | 금융위 법령해석 | `feed-fsc-lawreq` |
 | 비조치의견서 | `feed-fsc-opinion` |
 | MOFA 독자제재 | `feed-mofa-sanctions` |
-| OFAC 제재목록 업데이트 | `feed-ofac-sdn` |
+| OFAC Recent Actions | `feed-ofac-sdn` |
 | 운영(전일 digest + 실패알림) | `feed-ops` |
 
 봇 로직(멱등): 채널 없으면 `conversations.create` → 받은 `channel_id`를 sqlite에 저장. 이미 있으면
