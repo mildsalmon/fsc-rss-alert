@@ -86,7 +86,7 @@ def test_build_daily_digest_counts_previous_kst_day_and_source_state(tmp_path: P
     assert digest.stats[0].warning is False
     assert digest.stats[1].sent_count == 0
     assert digest.stats[1].warning is True
-    assert digest.stats[1].warning_reason == "no successful poll recorded"
+    assert digest.stats[1].warning_reason == "성공한 수집 기록 없음"
 
 
 def test_source_warning_uses_last_success_threshold() -> None:
@@ -97,17 +97,17 @@ def test_source_warning_uses_last_success_threshold() -> None:
     warning, reason = source_warning(source, now - timedelta(minutes=91), 0, now=now)
 
     assert warning is True
-    assert reason == "last success older than 90 minutes"
+    assert reason == "마지막 성공 후 90분 초과 경과"
 
 
 def test_relative_time_formats_common_ranges() -> None:
     now = datetime(2026, 6, 25, 12, 0, tzinfo=timezone.utc)
 
-    assert relative_time(None, now=now) == "never"
-    assert relative_time(now - timedelta(seconds=10), now=now) == "just now"
-    assert relative_time(now - timedelta(minutes=12), now=now) == "12m ago"
-    assert relative_time(now - timedelta(hours=3), now=now) == "3h ago"
-    assert relative_time(now - timedelta(days=2), now=now) == "2d ago"
+    assert relative_time(None, now=now) == "기록 없음"
+    assert relative_time(now - timedelta(seconds=10), now=now) == "방금 전"
+    assert relative_time(now - timedelta(minutes=12), now=now) == "12분 전"
+    assert relative_time(now - timedelta(hours=3), now=now) == "3시간 전"
+    assert relative_time(now - timedelta(days=2), now=now) == "2일 전"
 
 
 def test_format_digest_message_contains_summary_and_source_lines(tmp_path: Path) -> None:
@@ -121,7 +121,7 @@ def test_format_digest_message_contains_summary_and_source_lines(tmp_path: Path)
     digest = build_daily_digest(db_path, [make_source("mofa"), make_source("lawreq")], now=now)
     message = format_digest_message(digest)
 
-    assert "Feed collector daily digest - 2026-06-24 KST" in message
-    assert "Summary: OK 1 / WARN 1" in message
-    assert "OK mofa source (mofa)" in message
-    assert "WARN lawreq source (lawreq)" in message
+    assert "📋 피드 수집 일일 요약 — 2026-06-24 (KST)" in message
+    assert "상태: 정상 1 / 경고 1" in message
+    assert "✅ mofa source (mofa)" in message
+    assert "⚠️ lawreq source (lawreq)" in message

@@ -87,21 +87,21 @@ def build_daily_digest(
 def format_digest_message(digest: DailyDigest) -> str:
     generated_kst = digest.generated_at.astimezone(KST)
     lines = [
-        f"Feed collector daily digest - {digest.window.target_date.isoformat()} KST",
-        f"Generated: {generated_kst.strftime('%Y-%m-%d %H:%M KST')}",
-        f"Summary: OK {digest.ok_count} / WARN {digest.warning_count}",
+        f"📋 피드 수집 일일 요약 — {digest.window.target_date.isoformat()} (KST)",
+        f"생성 시각: {generated_kst.strftime('%Y-%m-%d %H:%M KST')}",
+        f"상태: 정상 {digest.ok_count} / 경고 {digest.warning_count}",
         "",
     ]
     for stat in digest.stats:
-        status = "WARN" if stat.warning else "OK"
+        status = "⚠️" if stat.warning else "✅"
         line = (
-            f"- {status} {stat.source.name} ({stat.source.id}): "
-            f"sent yesterday {stat.sent_count}, "
-            f"last success {relative_time(stat.last_success_at, now=digest.generated_at)}, "
-            f"failures {stat.consecutive_failures}"
+            f"{status} {stat.source.name} ({stat.source.id}): "
+            f"어제 발송 {stat.sent_count}건 · "
+            f"마지막 성공 {relative_time(stat.last_success_at, now=digest.generated_at)} · "
+            f"연속 실패 {stat.consecutive_failures}회"
         )
         if stat.warning_reason:
-            line = f"{line} - {stat.warning_reason}"
+            line = f"{line} — {stat.warning_reason}"
         lines.append(line)
     return "\n".join(lines)
 
@@ -127,31 +127,31 @@ def source_warning(
     stale_multiplier: int = DEFAULT_STALE_MULTIPLIER,
 ) -> tuple[bool, str | None]:
     if last_success_at is None:
-        return True, "no successful poll recorded"
+        return True, "성공한 수집 기록 없음"
     current = _as_utc(now or datetime.now(timezone.utc))
     stale_after = timedelta(minutes=source.interval_minutes * stale_multiplier)
     age = current - _as_utc(last_success_at)
     if age > stale_after:
-        return True, f"last success older than {source.interval_minutes * stale_multiplier} minutes"
+        return True, f"마지막 성공 후 {source.interval_minutes * stale_multiplier}분 초과 경과"
     del consecutive_failures
     return False, None
 
 
 def relative_time(value: datetime | None, *, now: datetime | None = None) -> str:
     if value is None:
-        return "never"
+        return "기록 없음"
     current = _as_utc(now or datetime.now(timezone.utc))
     delta = max(timedelta(0), current - _as_utc(value))
     minutes = int(delta.total_seconds() // 60)
     if minutes < 1:
-        return "just now"
+        return "방금 전"
     if minutes < 60:
-        return f"{minutes}m ago"
+        return f"{minutes}분 전"
     hours = minutes // 60
     if hours < 48:
-        return f"{hours}h ago"
+        return f"{hours}시간 전"
     days = hours // 24
-    return f"{days}d ago"
+    return f"{days}일 전"
 
 
 def _sent_counts(db_path: str | Path, window: DigestWindow) -> Counter[str]:

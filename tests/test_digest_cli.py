@@ -128,7 +128,7 @@ def test_digest_cli_sends_one_feed_ops_message_and_prunes_old_audit(
 
     assert FakeSlackChannelManager.instances[0].requested == [("ops", "Feed Collector Ops", None)]
     assert FakeSlackBotNotifier.instances[0].sent_texts[0][0] == "COPS"
-    assert "Feed collector daily digest" in FakeSlackBotNotifier.instances[0].sent_texts[0][1]
+    assert "피드 수집 일일 요약" in FakeSlackBotNotifier.instances[0].sent_texts[0][1]
     with sqlite3.connect(db_path) as conn:
         rows = conn.execute("SELECT item_id FROM audit_log ORDER BY item_id").fetchall()
         channel_row = conn.execute("SELECT channel_id FROM sources WHERE id = 'feed-ops'").fetchone()

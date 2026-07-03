@@ -269,8 +269,8 @@ def failure_alert_item(
 ) -> Item:
     current = now or datetime.now(timezone.utc)
     title = (
-        f"{source.name} poll failed: {reason.value} "
-        f"(consecutive failures: {state.consecutive_failures}) - {exc}"
+        f"⚠️ {source.name} 수집 실패 — 사유: {reason.value}, "
+        f"연속 실패 {state.consecutive_failures}회, 상세: {exc}"
     )
     return Item(
         item_id=f"failure://{source.id}/{reason.value}/{state.consecutive_failures}",
