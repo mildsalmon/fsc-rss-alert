@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "hipocampus": {
+      "source": {
+        "source": "github",
+        "repo": "kevin-hs-sohn/hipocampus"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "hipocampus@hipocampus": true
+  }
+}
