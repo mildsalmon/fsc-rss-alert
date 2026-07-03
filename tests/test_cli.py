@@ -357,7 +357,7 @@ def test_failure_alert_item_is_actionable() -> None:
     )
 
     assert item.item_id == "failure://mofa/STRUCTURE_CHANGED/2"
-    assert "mofa source poll failed" in item.title
+    assert "mofa source 수집 실패" in item.title
     assert item.link == source.url
 
 
