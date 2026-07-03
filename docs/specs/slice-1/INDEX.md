@@ -29,14 +29,14 @@
 ## Task 목록
 | ID | 제목 | 파일 | 의존 | 상태 | Effort(CC) |
 |----|------|------|------|------|-----------|
-| T1a | 패키지 리네임 (기계적) | `T1-hexagonal-core.md` | — | TODO | ~15분 |
-| T1b | 헥사고날 골격 + Item + SourceConfig + ports | `T1-hexagonal-core.md` | T1a | TODO | ~30분 |
-| T2 | SqliteStateRepo + 스키마 + dedup | `T2-sqlite-state.md` | T1b | TODO | ~40분 |
-| T3 | RSS 어댑터 + MOFA fetch profile | `T3-rss-adapter-mofa.md` | T1b | TODO | ~25분 |
-| T4 | DataTablesAdapter (법령해석) | `T4-datatables-adapter-lawreq.md` | T1b | TODO | ~25분 |
-| T5 | SlackBotNotifier + AuditLog | `T5-slack-bot-notifier.md` | T1b, T2 | TODO | ~40분 |
-| T6 | 소스 레지스트리 + CLI poll + 실패분류 | `T6-cli-config-poll.md` | T1b–T5 | TODO | ~40분 |
-| T7 | daily digest → feed-ops | `T7-daily-digest.md` | T6 | TODO | ~20분 |
+| T1a | 패키지 리네임 (기계적) | `T1-hexagonal-core.md` | — | DONE | ~15분 |
+| T1b | 헥사고날 골격 + Item + SourceConfig + ports | `T1-hexagonal-core.md` | T1a | DONE | ~30분 |
+| T2 | SqliteStateRepo + 스키마 + dedup | `T2-sqlite-state.md` | T1b | DONE | ~40분 |
+| T3 | RSS 어댑터 + MOFA fetch profile | `T3-rss-adapter-mofa.md` | T1b | DONE | ~25분 |
+| T4 | DataTablesAdapter (법령해석) | `T4-datatables-adapter-lawreq.md` | T1b | DONE | ~25분 |
+| T5 | SlackBotNotifier + AuditLog | `T5-slack-bot-notifier.md` | T1b, T2 | DONE | ~40분 |
+| T6 | 소스 레지스트리 + CLI poll + 실패분류 | `T6-cli-config-poll.md` | T1b–T5 | DONE | ~40분 |
+| T7 | daily digest → feed-ops | `T7-daily-digest.md` | T6 | DONE | ~20분 |
 
 > Effort는 거친 추정. 리뷰에서 "비현실적"으로 지적돼 상향 조정함(특히 T2/T5). 실제 시간 = 미지수 검증 비용.
 

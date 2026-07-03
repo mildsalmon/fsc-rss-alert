@@ -18,7 +18,7 @@
 | S2-T4 | EC2 bootstrap cron | `infra/aws/user_data.sh.tftpl` | DONE |
 | S2-T5 | 원격 state 가이드 | `infra/aws/backend.example.hcl`, README | DONE |
 | S2-T6 | 운영 런북 | `infra/aws/README.md`, root README 링크 | DONE |
-| S2-T7 | 실제 AWS apply/cutover | Terraform apply, GitHub variable 설정, 다음 poll/digest 관찰 | TODO |
+| S2-T7 | 실제 AWS apply/cutover | Terraform apply, GitHub variable 설정, 다음 poll/digest 관찰 | DONE |
 
 ## 인프라 범위
 
