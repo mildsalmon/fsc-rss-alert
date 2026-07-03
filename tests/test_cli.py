@@ -336,6 +336,14 @@ def test_infer_from_error_classifies_common_failures() -> None:
     assert infer_from_error(PollError("Feed fetch timed out")) is FetchFailureReason.TIMEOUT
     assert infer_from_error(PollError("Feed fetch returned HTTP 403")) is FetchFailureReason.BLOCKED
     assert infer_from_error(PollError("Feed fetch returned HTTP 404")) is FetchFailureReason.NOT_FOUND
+    assert (
+        infer_from_error(PollError("RSS parse produced no items for fsc-press"))
+        is FetchFailureReason.EMPTY_RESULT
+    )
+
+
+def test_empty_result_failures_wait_for_consecutive_failure_threshold() -> None:
+    assert FetchFailureReason.EMPTY_RESULT not in cli.IMMEDIATE_FAILURE_REASONS
 
 
 def test_failure_alert_item_is_actionable() -> None:

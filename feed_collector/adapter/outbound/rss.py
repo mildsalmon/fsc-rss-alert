@@ -1,17 +1,32 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from time import sleep
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import feedparser
 from dateutil import parser as date_parser
 
-from feed_collector.adapter.outbound.http_fetch import ByteFetcher, ByteFetcherFactory
+from feed_collector.adapter.outbound.http_fetch import (
+    ByteFetcher,
+    ByteFetcherFactory,
+    _non_negative_float,
+    _positive_int,
+)
 from feed_collector.application.port.output.source import SourcePort
+from feed_collector.config import DEFAULT_FETCH_RETRY_DELAY_SECONDS
 from feed_collector.domain import Item, SourceConfig
 from feed_collector.errors import PollError
+
+
+DEFAULT_EMPTY_RETRIES = 2
+
+
+class EmptyFeedError(PollError):
+    pass
 
 
 class RssAdapter(SourcePort):
@@ -20,11 +35,29 @@ class RssAdapter(SourcePort):
         source: SourceConfig,
         *,
         fetcher: ByteFetcher,
+        empty_retries: int = DEFAULT_EMPTY_RETRIES,
+        empty_retry_delay_seconds: float = DEFAULT_FETCH_RETRY_DELAY_SECONDS,
+        sleep_fn: Callable[[float], None] = sleep,
     ) -> None:
         self.source = source
         self.fetcher = fetcher
+        self.empty_retries = empty_retries
+        self.empty_retry_delay_seconds = empty_retry_delay_seconds
+        self.sleep_fn = sleep_fn
 
     def fetch(self) -> list[Item]:
+        last_empty_error: EmptyFeedError | None = None
+        for attempt in range(1, self.empty_retries + 1):
+            try:
+                return self._fetch_once()
+            except EmptyFeedError as exc:
+                last_empty_error = exc
+                if attempt < self.empty_retries and self.empty_retry_delay_seconds:
+                    self.sleep_fn(self.empty_retry_delay_seconds)
+        assert last_empty_error is not None
+        raise last_empty_error
+
+    def _fetch_once(self) -> list[Item]:
         try:
             feed_bytes = self.fetcher.fetch(self.source.url)
         except PollError as exc:
@@ -41,7 +74,17 @@ class RssAdapterFactory:
     fetcher_factory: ByteFetcherFactory
 
     def create(self, source: SourceConfig) -> RssAdapter:
-        return RssAdapter(source, fetcher=self.fetcher_factory.create(source))
+        return RssAdapter(
+            source,
+            fetcher=self.fetcher_factory.create(source),
+            empty_retries=_positive_int(source, "empty_retries", None, DEFAULT_EMPTY_RETRIES),
+            empty_retry_delay_seconds=_non_negative_float(
+                source,
+                "empty_retry_delay_seconds",
+                None,
+                DEFAULT_FETCH_RETRY_DELAY_SECONDS,
+            ),
+        )
 
     def __call__(self, source: SourceConfig) -> RssAdapter:
         return self.create(source)
@@ -60,7 +103,7 @@ def parse_items(
 
     items = [item for entry in entries if (item := _entry_to_item(entry, source_id))]
     if not items and empty_result_policy == "error":
-        raise PollError(f"RSS parse produced no items for {source_id}")
+        raise EmptyFeedError(f"RSS parse produced no items for {source_id}")
     return items
 
 
@@ -105,4 +148,4 @@ def normalize_http_443_url(value: str) -> str:
     return urlunsplit(("https", parsed.hostname, parsed.path, parsed.query, parsed.fragment))
 
 
-__all__ = ["RssAdapter", "RssAdapterFactory", "normalize_http_443_url", "parse_items"]
+__all__ = ["EmptyFeedError", "RssAdapter", "RssAdapterFactory", "normalize_http_443_url", "parse_items"]
