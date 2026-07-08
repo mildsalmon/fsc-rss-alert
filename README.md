@@ -6,7 +6,7 @@
 
 금감원 보도자료, 금융위 보도자료, 금융위 입법예고/규정변경예고, FIU 제재공시,
 
-OFAC Recent Actions를 폴링합니다.
+OFAC Sanctions List Updates를 폴링합니다.
 
 첫 실행은 소스별 현재 항목을 기준선으로 저장하고 알림을 보내지 않습니다.
 

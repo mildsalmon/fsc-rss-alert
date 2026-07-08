@@ -67,7 +67,7 @@ FSC_LEGISLATION_HTML = """
 """
 
 
-OFAC_RECENT_ACTIONS_HTML = """
+OFAC_SANCTIONS_LIST_UPDATES_HTML = """
 <html>
   <body>
     <div class="view-content">
@@ -93,7 +93,7 @@ OFAC_RECENT_ACTIONS_HTML = """
         <div>
           <div class="margin-top-1 font-sans-2xs line-height-sans-3 margin-bottom-1">
             July 1, 2026 -
-            <a href="/recent-actions/regulations-and-guidance">Regulations and Guidance</a>
+            <a href="/recent-actions/sanctions-list-updates">Sanctions List Updates</a>
           </div>
         </div>
       </div>
@@ -161,7 +161,7 @@ def make_fsc_legislation_source(
     )
 
 
-def make_ofac_recent_actions_source(
+def make_ofac_sanctions_list_updates_source(
     *,
     params: dict[str, ParamValue] | None = None,
     empty_result_policy: EmptyResultPolicy = "error",
@@ -177,12 +177,12 @@ def make_ofac_recent_actions_source(
     return SourceConfig(
         id="ofac-sdn",
         slug="ofac-sdn",
-        name="OFAC Recent Actions",
+        name="OFAC Sanctions List Updates",
         mechanism="html",
         parser_version=1,
         channel_id=None,
         interval_minutes=30,
-        url="https://ofac.treasury.gov/recent-actions",
+        url="https://ofac.treasury.gov/recent-actions/sanctions-list-updates",
         params=base_params | (params or {}),
         empty_result_policy=empty_result_policy,
     )
@@ -229,10 +229,10 @@ def test_html_scrape_adapter_maps_fsc_legislation_list_rows_to_items() -> None:
     assert items[0].published == datetime(2026, 6, 5, tzinfo=ZoneInfo("Asia/Seoul"))
 
 
-def test_html_scrape_adapter_maps_ofac_recent_action_rows_to_items() -> None:
+def test_html_scrape_adapter_maps_ofac_sanctions_list_update_rows_to_items() -> None:
     adapter = HtmlScrapeAdapter(
-        make_ofac_recent_actions_source(),
-        fetcher=FakeFetcher(OFAC_RECENT_ACTIONS_HTML.encode()),
+        make_ofac_sanctions_list_updates_source(),
+        fetcher=FakeFetcher(OFAC_SANCTIONS_LIST_UPDATES_HTML.encode()),
     )
 
     items = adapter.fetch()

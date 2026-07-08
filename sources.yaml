@@ -117,13 +117,13 @@
 
 - id: ofac-sdn
   slug: ofac-sdn
-  name: OFAC Recent Actions
+  name: OFAC Sanctions List Updates
   mechanism: html
   parser_version: 1
   channel_id:
   interval_minutes: 30
-  url: https://ofac.treasury.gov/recent-actions
-  display_url: https://ofac.treasury.gov/recent-actions
+  url: https://ofac.treasury.gov/recent-actions/sanctions-list-updates
+  display_url: https://ofac.treasury.gov/recent-actions/sanctions-list-updates
   params:
     row_tag: div
     row_class_contains: views-row

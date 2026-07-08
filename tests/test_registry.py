@@ -231,16 +231,16 @@ def test_default_fiu_source_uses_json_board_config() -> None:
     assert fiu.list_path == "result"
 
 
-def test_default_ofac_source_uses_recent_actions_html_config() -> None:
+def test_default_ofac_source_uses_sanctions_list_updates_html_config() -> None:
     sources = {source.id: source for source in load_sources(Path("sources.yaml"))}
 
     ofac = sources["ofac-sdn"]
 
-    assert ofac.name == "OFAC Recent Actions"
+    assert ofac.name == "OFAC Sanctions List Updates"
     assert ofac.slug == "ofac-sdn"
     assert ofac.mechanism == "html"
-    assert ofac.url == "https://ofac.treasury.gov/recent-actions"
-    assert ofac.display_url == "https://ofac.treasury.gov/recent-actions"
+    assert ofac.url == "https://ofac.treasury.gov/recent-actions/sanctions-list-updates"
+    assert ofac.display_url == "https://ofac.treasury.gov/recent-actions/sanctions-list-updates"
     assert ofac.params["row_tag"] == "div"
     assert ofac.params["row_class_contains"] == "views-row"
     assert ofac.params["link_href_contains"] == "/recent-actions/"
